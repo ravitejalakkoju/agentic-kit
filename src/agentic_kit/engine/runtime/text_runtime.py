@@ -130,7 +130,7 @@ class TextRuntime:
         poisoned = {
             fact.key
             for fact in update.facts
-            if not self._guardrails.check(Checkpoint.MEMORY, request, fact.value).passed
+            if not self._guardrails.check(Checkpoint.MEMORY, fact.value, request=request).passed
         }
         if not poisoned:
             return update
@@ -151,7 +151,7 @@ class TextRuntime:
     def _check(
         self, checkpoint: Checkpoint, request: TurnRequest, text: str
     ) -> RuntimeReply | None:
-        verdict = self._guardrails.check(checkpoint, request, text)
+        verdict = self._guardrails.check(checkpoint, text, request=request)
         failure = verdict.failure
         if verdict.passed or failure is None:
             return None

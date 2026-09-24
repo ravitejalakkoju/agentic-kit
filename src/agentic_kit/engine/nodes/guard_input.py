@@ -24,7 +24,9 @@ class GuardInputNode:
         if state.conversation is None:
             raise EngineError("input screening reached without a conversation")
 
-        verdict = self._guardrails.check(Checkpoint.INPUT, state.request, state.request.text)
+        verdict = self._guardrails.check(
+            Checkpoint.INPUT, state.request.text, request=state.request
+        )
         failure = verdict.failure
         if verdict.passed or failure is None:
             return Outcome.CONTINUE

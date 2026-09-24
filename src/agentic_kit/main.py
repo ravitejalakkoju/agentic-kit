@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from .api import graph, prompts, tools, turns
-from .composition import build
+from .api import graph, knowledge, prompts, tools, turns
+from .composition import build, seed_knowledge
 from .errors import EngineError, ProviderError
 from .ports.llm import LlmPort
 from .settings import Settings, load_settings
@@ -24,6 +24,7 @@ def create_app(settings: Settings | None = None, llm: LlmPort | None = None) -> 
         resolved = settings or load_settings()
         app.state.settings = resolved
         app.state.components = build(resolved, llm)
+        await seed_knowledge(app.state.components.knowledge)
         yield
 
     app = FastAPI(
@@ -36,6 +37,7 @@ def create_app(settings: Settings | None = None, llm: LlmPort | None = None) -> 
     app.include_router(graph.router)
     app.include_router(prompts.router)
     app.include_router(tools.router)
+    app.include_router(knowledge.router)
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, bool]:

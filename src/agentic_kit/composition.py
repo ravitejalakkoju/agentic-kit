@@ -9,13 +9,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .adapters.dummy_llm import DummyLlm
+from .adapters.hash_embedder import HashEmbedder
 from .adapters.memory import InMemoryConversationStore, InMemoryRunStore, InMemorySopCatalog
+from .adapters.openai_embedder import OpenAiEmbedder
 from .adapters.openai_llm import OpenAiLlm
 from .adapters.sample_crm import (
     InMemoryContactReader,
     InMemoryRecordReader,
     InMemoryTicketNotes,
 )
+from .adapters.vector_store import InMemoryVectorStore
 from .domain.crm import Order, Ticket
 from .domain.models import FlowKind
 from .engine.ai_engine import AiEngine
@@ -30,6 +33,7 @@ from .engine.guardrails import (
     Guardrails,
     default_detectors,
 )
+from .engine.knowledge.base import KnowledgeBase
 from .engine.nodes.failed import FailedNode
 from .engine.nodes.finalize import FinalizeNode
 from .engine.nodes.guard_input import GuardInputNode
@@ -43,9 +47,23 @@ from .engine.prompt.builder import PromptBuilder
 from .engine.prompt.context import ContactCollector, ContextPipeline, ResourceCollector
 from .engine.prompt.sections import DEFAULT_SECTIONS
 from .engine.runtime.text_runtime import TextRuntime
-from .engine.tools import AddTicketNote, LookupContact, LookupTicket, ToolRegistry, TrackOrder
+from .engine.tools import (
+    AddTicketNote,
+    LookupContact,
+    LookupTicket,
+    SearchKnowledge,
+    ToolRegistry,
+    TrackOrder,
+)
+from .ports.knowledge import Embedder
 from .ports.llm import LlmPort
-from .seed import DEFAULT_SOPS, SAMPLE_CONTACTS, SAMPLE_ORDERS, SAMPLE_TICKETS
+from .seed import (
+    DEFAULT_SOPS,
+    SAMPLE_CONTACTS,
+    SAMPLE_DOCUMENTS,
+    SAMPLE_ORDERS,
+    SAMPLE_TICKETS,
+)
 from .settings import Settings
 
 STUBBED_NODES = (
@@ -65,6 +83,7 @@ class Components:
     prompts: PromptBuilder
     tools: ToolRegistry
     crm: Crm
+    knowledge: KnowledgeBase
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,13 +122,35 @@ def build_prompts(rules: tuple[str, ...] = (), crm: Crm | None = None) -> Prompt
     return PromptBuilder(context, DEFAULT_SECTIONS, rules)
 
 
-def build_tools(crm: Crm) -> ToolRegistry:
+def build_knowledge(
+    embedder: Embedder | None = None, guardrails: Guardrails | None = None
+) -> KnowledgeBase:
+    return KnowledgeBase(
+        embedder or HashEmbedder(),
+        InMemoryVectorStore(),
+        guardrails or Guardrails(default_detectors(), DEFAULT_PROFILE),
+    )
+
+
+async def seed_knowledge(knowledge: KnowledgeBase) -> None:
+    """Fill the sample library.
+
+    Separate from `build` because embedding is a network call in the live
+    configuration, and a constructor that waits on one is a constructor that
+    can time out.
+    """
+    for document in SAMPLE_DOCUMENTS:
+        await knowledge.ingest(document)
+
+
+def build_tools(crm: Crm, knowledge: KnowledgeBase | None = None) -> ToolRegistry:
     return ToolRegistry(
         [
             TrackOrder(crm.orders),
             LookupTicket(crm.tickets),
             LookupContact(crm.contacts),
             AddTicketNote(crm.ticket_notes),
+            SearchKnowledge(knowledge or build_knowledge()),
         ]
     )
 
@@ -120,6 +161,18 @@ def build_llm(settings: Settings) -> LlmPort:
     return OpenAiLlm(
         api_key=settings.openai_api_key,
         model=settings.openai_model,
+        base_url=settings.openai_base_url,
+        timeout_seconds=settings.openai_timeout_seconds,
+    )
+
+
+def build_embedder(settings: Settings) -> Embedder:
+    """The same key decides both, because one provider is being configured, not two."""
+    if not settings.has_live_llm:
+        return HashEmbedder()
+    return OpenAiEmbedder(
+        api_key=settings.openai_api_key,
+        model=settings.openai_embedding_model,
         base_url=settings.openai_base_url,
         timeout_seconds=settings.openai_timeout_seconds,
     )
@@ -136,8 +189,9 @@ def build(
     guardrails = Guardrails(default_detectors(), profile)
     responder = GuardrailResponder()
     crm = build_crm()
+    knowledge = build_knowledge(build_embedder(settings), guardrails)
     prompts = build_prompts(profile.rules, crm)
-    tools = build_tools(crm)
+    tools = build_tools(crm, knowledge)
     runtime = TextRuntime(llm or build_llm(settings), prompts, guardrails, responder, tools)
 
     nodes: list[Node] = [
@@ -162,4 +216,5 @@ def build(
         prompts=prompts,
         tools=tools,
         crm=crm,
+        knowledge=knowledge,
     )

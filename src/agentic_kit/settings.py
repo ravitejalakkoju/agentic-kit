@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     port: int = 3200
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
     openai_base_url: str | None = None
     openai_timeout_seconds: float = 30.0
 

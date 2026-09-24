@@ -88,7 +88,8 @@ def layers() -> Diagram:
     d.box(
         "routers",
         "api/ routers\nPOST /v1/turns      POST /v1/prompts/preview\n"
-        "GET /v1/tools      GET /v1/graph\nGET /v1/conversations/{id}      GET /v1/sops",
+        "GET /v1/tools      GET /v1/graph      GET /v1/sops\n"
+        "GET /v1/conversations/{id}      POST /v1/knowledge      POST /v1/knowledge/search",
         415,
         210,
         640,
@@ -111,7 +112,7 @@ def layers() -> Diagram:
     d.box("settings", "settings.py\nSettings", 75, 420, 230, 100, CLIENT)
     d.box(
         "seed",
-        "seed.py\nDEFAULT_SOPS\nSAMPLE_CONTACTS / ORDERS / TICKETS",
+        "seed.py\nDEFAULT_SOPS\nSAMPLE_CONTACTS / ORDERS / TICKETS\nSAMPLE_DOCUMENTS",
         345,
         420,
         340,
@@ -129,7 +130,7 @@ def layers() -> Diagram:
     )
     d.box(
         "components",
-        "Components\nengine - conversations - runs - catalog\nprompts - tools - crm",
+        "Components\nengine - conversations - runs - catalog\nprompts - tools - crm - knowledge",
         1225,
         420,
         380,
@@ -172,12 +173,21 @@ def layers() -> Diagram:
     }
     for key, (label, x) in fanout.items():
         d.box(key, label, x, 900, 240, 100, INTERNAL)
+    d.box(
+        "knowledge",
+        "KnowledgeBase\nchunk, embed, search,\nscreen both ways",
+        1320,
+        900,
+        240,
+        100,
+        INTERNAL,
+    )
 
     d.group_box(
-        "band-ports", "ports - protocols the engine depends on", 40, 1050, 600, 480, BACKDROP
+        "band-ports", "ports - protocols the engine depends on", 40, 1050, 600, 550, BACKDROP
     )
     d.group_box(
-        "band-adapters", "adapters - what satisfies them today", 680, 1050, 980, 480, BACKDROP
+        "band-adapters", "adapters - what satisfies them today", 680, 1050, 980, 550, BACKDROP
     )
     seams = (
         ("conv", "ConversationStore", "InMemoryConversationStore"),
@@ -192,7 +202,12 @@ def layers() -> Diagram:
         (
             "tool",
             "Tool[ArgsT]  -  ToolContext  -  ConfirmableArgs",
-            "TrackOrder  -  LookupTicket  -  LookupContact  -  AddTicketNote",
+            "TrackOrder  -  LookupTicket  -  LookupContact  -  AddTicketNote  -  SearchKnowledge",
+        ),
+        (
+            "knowledge",
+            "Embedder  -  VectorStore",
+            "OpenAiEmbedder  -  HashEmbedder  -  InMemoryVectorStore",
         ),
     )
     for row, (key, port, adapter) in enumerate(seams):
@@ -203,14 +218,14 @@ def layers() -> Diagram:
     d.text("implements", "implements", 588, 1118, size=12)
 
     d.group_box(
-        "band-domain", "domain - plain data, imports nothing", 40, 1560, 1620, 160, BACKDROP
+        "band-domain", "domain - plain data, imports nothing", 40, 1630, 1620, 290, BACKDROP
     )
     d.box(
         "models",
         "domain/models.py\nTurnRequest - TurnResult - ConversationState\n"
         "Message - SopDefinition - RunRecord",
         75,
-        1600,
+        1670,
         340,
         100,
         CLIENT,
@@ -218,23 +233,41 @@ def layers() -> Diagram:
     d.box(
         "memory-models",
         "domain/memory.py\nWorkingMemory - Fact - PendingInput\nMemoryUpdate",
-        470,
-        1600,
+        455,
+        1670,
         280,
         100,
         CLIENT,
     )
-    d.box("crm-models", "domain/crm.py\nContact - Order - Ticket", 805, 1600, 230, 100, CLIENT)
+    d.box(
+        "knowledge-models",
+        "domain/knowledge.py\nDocument - Chunk - Passage - Shelved",
+        775,
+        1670,
+        330,
+        100,
+        CLIENT,
+    )
+    d.box("crm-models", "domain/crm.py\nContact - Order - Ticket", 1125, 1670, 230, 100, CLIENT)
     d.box(
         "tool-models",
         "domain/tools.py\nToolDefinition - ToolCall - ToolResult\nSafety - ToolStatus",
-        1090,
-        1600,
+        75,
+        1790,
         300,
         100,
         CLIENT,
     )
-    d.box("errors", "errors.py\nEngineError", 1445, 1600, 170, 100, CLIENT)
+    d.box(
+        "text-models",
+        "domain/text.py\nreadable() - fold lookalikes,\ndrop what renders as nothing",
+        415,
+        1790,
+        290,
+        100,
+        CLIENT,
+    )
+    d.box("errors", "errors.py\nEngineError", 745, 1790, 170, 100, CLIENT)
 
     d.arrow("main", "routers")
     d.arrow("routers", "deps")
@@ -252,6 +285,7 @@ def layers() -> Diagram:
     d.arrow("nodes", "runtime", via=[(1240, 765), (740, 765)], label="RunRuntimeNode")
     for key, (_, x) in fanout.items():
         d.arrow("runtime", key, via=[(x + 120, 888)])
+    d.arrow("registry", "knowledge", label="search_knowledge")
     d.arrow("runtime", "port-llm", via=[(62, 835), (62, 1354)])
     d.arrow(
         "nodes",
@@ -545,6 +579,14 @@ def seams() -> Diagram:
             STORE,
             ["InMemoryConversationStore", "InMemoryRunStore", "InMemorySopCatalog"],
         ),
+        Panel(
+            "knowledge",
+            "what it can look up",
+            "Embedder\nVectorStore",
+            "KnowledgeBase",
+            CLIENT,
+            ["OpenAiEmbedder", "HashEmbedder", "InMemoryVectorStore"],
+        ),
     )
 
     row_one, row_two = panels[:4], panels[4:]
@@ -644,11 +686,11 @@ PHASES = (
     Phase(
         "5",
         "Knowledge and RAG",
-        False,
+        True,
         (
-            "Qdrant in local mode, no Docker needed",
-            "1800 / 250 chunking, text-embedding-3-small",
-            "top 3 at 0.4, collection {tenantId}_kb",
+            "paragraph-first chunking, no overlap to pay for",
+            "Embedder and VectorStore ports, top 3 over a floor",
+            "retrieval is a tool, screened going in and coming out",
         ),
     ),
     Phase(
@@ -686,7 +728,8 @@ DEFERRED = (
     "reply formatting, the generateReply idea - rewrite the answer to a house style",
     "guardrail findings recorded on run records, not just acted on",
     "per-agent guardrail profiles instead of one DEFAULT_PROFILE",
-    "a detector for RAG answer quality, once phase 5 lands",
+    "a RAG quality detector - turns a gap in the library into a blocked turn",
+    "an approximate index behind VectorStore, once exact search stops being fast",
     "guardrail checkpoints around tool arguments and tool results",
     "a model-based prompt injection classifier behind the regex one",
     "memory confidence, TTL, and re-promotion from the superseded archive",

@@ -10,12 +10,13 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
+from ...domain.text import readable
 from .findings import Action, Checkpoint, Finding, GuardrailContext, Level
 
 INPUT = frozenset({Checkpoint.INPUT})
 OUTPUT = frozenset({Checkpoint.OUTPUT})
-UNTRUSTED = frozenset({Checkpoint.INPUT, Checkpoint.MEMORY})
-"""Both places text the agent did not write reaches the agent."""
+UNTRUSTED = frozenset({Checkpoint.INPUT, Checkpoint.MEMORY, Checkpoint.KNOWLEDGE})
+"""Every place text the agent did not write reaches the agent."""
 
 
 class Detector(Protocol):
@@ -37,7 +38,7 @@ class PolicyPhraseDetector:
         self._phrases = tuple(phrase.lower() for phrase in phrases)
 
     def evaluate(self, context: GuardrailContext) -> Finding | None:
-        text = context.text.lower()
+        text = readable(context.text).lower()
         phrase = next((p for p in self._phrases if p in text), None)
         if phrase is None:
             return None
@@ -51,7 +52,12 @@ class PolicyPhraseDetector:
 
 
 class PromptInjectionDetector:
-    """Attempts to talk the agent out of its own instructions."""
+    """Attempts to talk the agent out of its own instructions.
+
+    Matching runs on the normalised text, because these patterns look for words
+    and the cheapest way past them is to break a word with a character that
+    renders as nothing.
+    """
 
     id = "prompt_injection"
     checkpoints = UNTRUSTED
@@ -67,9 +73,10 @@ class PromptInjectionDetector:
     WARN_PATTERN = re.compile(r"forget\s+(?:everything|all|the|your)?\s*previous", re.I)
 
     def evaluate(self, context: GuardrailContext) -> Finding | None:
-        if any(pattern.search(context.text) for pattern in self.FAIL_PATTERNS):
+        text = readable(context.text)
+        if any(pattern.search(text) for pattern in self.FAIL_PATTERNS):
             return self._finding(context, Level.FAIL, "looks like a prompt injection attempt")
-        if self.WARN_PATTERN.search(context.text):
+        if self.WARN_PATTERN.search(text):
             return self._finding(context, Level.WARN, "mentions forgetting previous instructions")
         return None
 

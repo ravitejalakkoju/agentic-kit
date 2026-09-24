@@ -66,7 +66,7 @@ def profile_with(mode: Mode, *detector_ids: str) -> GuardrailProfile:
 
 
 def check(guardrails: Guardrails, text: str = "anything") -> Verdict:
-    return guardrails.check(Checkpoint.INPUT, REQUEST, text)
+    return guardrails.check(Checkpoint.INPUT, text, request=REQUEST)
 
 
 def test_disabled_checkpoint_never_runs_a_detector() -> None:
@@ -194,8 +194,10 @@ def test_every_input_block_has_a_reply(detector_id: str) -> None:
     assert GuardrailResponder().reply_for(finding)
 
 
-STOPS_A_TURN = [c for c in Checkpoint if c is not Checkpoint.MEMORY]
-"""MEMORY only ever costs a fact, so it never has to be explained to a customer."""
+SILENT = {Checkpoint.MEMORY, Checkpoint.KNOWLEDGE}
+"""These only ever cost a piece of text, so neither has to be explained to a customer."""
+
+STOPS_A_TURN = [checkpoint for checkpoint in Checkpoint if checkpoint not in SILENT]
 
 
 @pytest.mark.parametrize("checkpoint", STOPS_A_TURN)
@@ -208,5 +210,5 @@ def test_every_checkpoint_that_stops_a_turn_has_a_fallback_reply(checkpoint: Che
 @pytest.mark.parametrize("detector", default_detectors(), ids=lambda d: d.id)
 def test_default_detectors_pass_an_ordinary_message(detector: Detector) -> None:
     for checkpoint in detector.checkpoints:
-        context = GuardrailContext(checkpoint, REQUEST, "Where is my order 1001?")
+        context = GuardrailContext(checkpoint, "Where is my order 1001?", REQUEST)
         assert detector.evaluate(context) is None

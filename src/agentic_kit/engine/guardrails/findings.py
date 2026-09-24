@@ -16,6 +16,8 @@ class Checkpoint(StrEnum):
     OUTPUT = "output"
     MEMORY = "memory"
     """A fact on its way into storage, where it would join every later prompt."""
+    KNOWLEDGE = "knowledge"
+    """A document or a passage, which is third-party text the customer never wrote."""
 
 
 class Level(StrEnum):
@@ -60,12 +62,14 @@ class Verdict:
 
 @dataclass(frozen=True, slots=True)
 class GuardrailContext:
-    """One detector's view of a turn.
+    """One detector's view of whatever is being checked.
 
-    `text` is whatever the checkpoint is about: the customer's message, the
-    assembled prompt, or the drafted reply.
+    `text` is what the checkpoint is about: the customer's message, the
+    assembled prompt, the drafted reply, or a document on its way into the
+    knowledge base. That last one has no turn behind it, which is the whole
+    reason the request is optional.
     """
 
     checkpoint: Checkpoint
-    request: TurnRequest
     text: str
+    request: TurnRequest | None = None

@@ -10,10 +10,12 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ...domain.crm import Order, Ticket
+from ...domain.knowledge import Passage
 from ...domain.models import TurnRequest
 from ...domain.tools import Safety, ToolResult
 from ...ports.readers import ContactReader, RecordReader, TicketWriter
 from ...ports.tools import ConfirmableArgs, ToolContext
+from ..knowledge.base import KnowledgeBase
 
 
 class TrackOrderArgs(BaseModel):
@@ -175,3 +177,58 @@ class AddTicketNote:
         return ToolResult.ok(f"The note was added to ticket {ticket_id}.").remembering(
             ticket_id=ticket_id
         )
+
+
+class SearchKnowledgeArgs(BaseModel):
+    question: str = Field(description="What you need to know, phrased as the customer asked it.")
+
+
+class SearchKnowledge:
+    """Looks things up in the policy library.
+
+    A tool the model has to ask for, rather than passages that appear in every
+    prompt. Asking is cheaper, since most turns need no policy at all, and the
+    answer then arrives as a tool result, which is the one place the agent has
+    been told text is material to read and not an instruction to follow.
+    """
+
+    name = "search_knowledge"
+    description = (
+        "Search company policy and help articles. "
+        "Use this before stating any policy on returns, shipping, refunds or warranties, "
+        "and quote what it gives you rather than what you remember."
+    )
+    safety = Safety.READ
+    args_model = SearchKnowledgeArgs
+    remembers = ()
+    """A passage is not an identifier. Policy changes, so it is looked up each time."""
+
+    def __init__(self, knowledge: KnowledgeBase) -> None:
+        self._knowledge = knowledge
+
+    def is_available(self, request: TurnRequest) -> bool:
+        return True
+
+    async def execute(self, args: SearchKnowledgeArgs, context: ToolContext) -> ToolResult:
+        passages = await self._knowledge.find(args.question)
+        if not passages:
+            return ToolResult.missing(
+                "Nothing in the policy library covers that. "
+                "Say so rather than answering from memory."
+            )
+        return ToolResult.ok(
+            f"Found {len(passages)} passage(s).", passages=[_quote(p) for p in passages]
+        )
+
+
+def _quote(passage: Passage) -> dict[str, str]:
+    """A passage as the model reads it.
+
+    The match score is left out. It cannot be calibrated by a reader and it
+    only invites an answer hedged with a number the customer cannot use.
+    """
+    return {
+        "title": passage.chunk.title,
+        "source": passage.chunk.source,
+        "text": passage.chunk.text,
+    }

@@ -24,13 +24,20 @@ class Guardrails:
     def rules(self) -> tuple[str, ...]:
         return self._profile.rules
 
-    def check(self, checkpoint: Checkpoint, request: TurnRequest, text: str) -> Verdict:
+    def check(
+        self, checkpoint: Checkpoint, text: str, *, request: TurnRequest | None = None
+    ) -> Verdict:
+        """Run the checkpoint's detectors over one piece of text.
+
+        Ingesting a document is a checkpoint with no turn behind it, so the
+        request is optional and only ever used for the log line.
+        """
         policy = self._profile.policy_for(checkpoint)
         if policy.mode is Mode.DISABLED:
             return PASSED
 
         enforcing = policy.mode is Mode.ENFORCE
-        context = GuardrailContext(checkpoint=checkpoint, request=request, text=text)
+        context = GuardrailContext(checkpoint=checkpoint, text=text, request=request)
         findings: list[Finding] = []
 
         for detector in self._selected(checkpoint, policy.detector_ids):
@@ -53,11 +60,14 @@ class Guardrails:
             elif checkpoint in detector.checkpoints:
                 yield detector
 
-    def _log(self, request: TurnRequest, finding: Finding) -> None:
+    def _log(self, request: TurnRequest | None, finding: Finding) -> None:
         logger.info(
             "guardrail %s at %s: %s",
             finding.detector_id,
             finding.checkpoint,
             finding.message,
-            extra={"conversation_id": request.conversation_id, "level": finding.level},
+            extra={
+                "conversation_id": request.conversation_id if request else None,
+                "level": finding.level,
+            },
         )

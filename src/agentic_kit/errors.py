@@ -13,3 +13,7 @@ class GraphValidationError(EngineError):
 
 class ProviderError(EngineError):
     """An external model provider failed."""
+
+
+class KnowledgeError(EngineError):
+    """The knowledge base was handed something it cannot store or search."""
