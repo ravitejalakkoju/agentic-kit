@@ -18,10 +18,12 @@ class RunStore(Protocol):
 
 
 class SopCatalog(Protocol):
-    async def get(self, sop_id: str) -> SopDefinition | None: ...
+    """Holds the procedures. Deliberately cannot pick between them.
 
-    async def match(self, text: str) -> SopDefinition | None:
-        """Pick the procedure for an utterance. Real matching arrives with multiple SOPs."""
-        ...
+    Choosing one for an utterance is a judgement over what was said, which is
+    the matcher's job; a store that also ranked would be two things.
+    """
+
+    async def get(self, sop_id: str) -> SopDefinition | None: ...
 
     async def list_all(self) -> list[SopDefinition]: ...

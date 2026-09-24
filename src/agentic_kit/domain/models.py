@@ -13,6 +13,9 @@ from .memory import WorkingMemory
 HISTORY_LIMIT = 20
 """Turns kept per conversation, matching the cap the TypeScript engine applies on save."""
 
+MAX_ATTEMPTS = 3
+"""Turns in a row that went nowhere before a person is asked for."""
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -99,6 +102,12 @@ class SopDefinition(BaseModel):
     instructions: str
     examples: list[str] = Field(default_factory=list)
     """Customer utterances that should route here. Used for matching, never shown as replies."""
+    catch_all: bool = False
+    """Whether this procedure takes a turn that matched nothing.
+
+    Somebody has to answer "hi". Without a desk that accepts the unclassified,
+    the most ordinary opening line a customer writes gets no reply at all.
+    """
     personality: Personality
     response_strategy: str | None = None
     example_responses: list[str] = Field(default_factory=list)
@@ -113,12 +122,23 @@ class ConversationState(BaseModel):
     history: list[Message] = Field(default_factory=list)
     memory: WorkingMemory = Field(default_factory=WorkingMemory)
     attempts: int = 0
+    """Turns in a row that did not help. A model that errored and a reply that
+    had to be blocked are the same thing from where the customer is sitting."""
     human_handoff_requested: bool = False
     closed: bool = False
 
     def append(self, *messages: Message) -> None:
         """Record turns, keeping only the most recent HISTORY_LIMIT."""
         self.history = [*self.history, *messages][-HISTORY_LIMIT:]
+
+    def record_stall(self) -> None:
+        """Another turn that got the customer no further."""
+        self.attempts += 1
+
+    @property
+    def stalled(self) -> bool:
+        """Enough of them in a row that trying again is not the answer."""
+        return self.attempts >= MAX_ATTEMPTS
 
 
 class RunRecord(BaseModel):

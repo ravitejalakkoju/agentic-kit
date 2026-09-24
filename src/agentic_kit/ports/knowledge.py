@@ -11,8 +11,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from ..domain.knowledge import Chunk, Passage, Shelved
-
-type Vector = Sequence[float]
+from ..domain.vectors import Vector
 
 
 class Embedder(Protocol):

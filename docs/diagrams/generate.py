@@ -21,6 +21,7 @@ from agentic_kit.composition import STUBBED_NODES, build_crm, build_tools
 from agentic_kit.engine.graph.edges import EDGES
 from agentic_kit.engine.graph.state import NodeKey, Outcome
 from agentic_kit.engine.guardrails import default_detectors
+from agentic_kit.engine.nodes.detect_sop_drift import DetectSopDriftNode
 from agentic_kit.engine.nodes.failed import FailedNode
 from agentic_kit.engine.nodes.finalize import FinalizeNode
 from agentic_kit.engine.nodes.guard_input import GuardInputNode
@@ -28,9 +29,12 @@ from agentic_kit.engine.nodes.handoff import HandoffNode
 from agentic_kit.engine.nodes.load_state import LoadStateNode
 from agentic_kit.engine.nodes.passthrough import PassThroughNode
 from agentic_kit.engine.nodes.persist_state import PersistStateNode
+from agentic_kit.engine.nodes.review_result import ReviewResultNode
 from agentic_kit.engine.nodes.route import RouteNode
 from agentic_kit.engine.nodes.run_runtime import RunRuntimeNode
+from agentic_kit.engine.nodes.select_sop import SelectSopNode
 from agentic_kit.engine.prompt.sections import DEFAULT_SECTIONS
+from agentic_kit.engine.routing.matcher import AMBIGUITY, MARGIN
 from agentic_kit.engine.runtime.text_runtime import MAX_TOOL_ROUNDS
 
 HERE = Path(__file__).resolve().parent
@@ -49,7 +53,10 @@ REAL_NODES = (
     LoadStateNode,
     GuardInputNode,
     RouteNode,
+    SelectSopNode,
+    DetectSopDriftNode,
     RunRuntimeNode,
+    ReviewResultNode,
     PersistStateNode,
     HandoffNode,
     FailedNode,
@@ -156,7 +163,7 @@ def layers() -> Diagram:
     d.box("nodes", f"nodes/\n{len(NodeKey)} Node classes", 1125, 650, 230, 90, NODE)
     d.box(
         "graphstate",
-        "GraphState\nrequest - conversation - sop\nreply - result - memory",
+        "GraphState\nrequest - conversation\nsop - matches - reply\nresult - memory",
         1395,
         650,
         240,
@@ -165,6 +172,15 @@ def layers() -> Diagram:
     )
 
     d.box("runtime", "TextRuntime\nthe agent loop, bounded", 590, 790, 300, 90, INTERNAL)
+    d.box(
+        "matcher",
+        "SopMatcher\nranks the catalog against\nthe turn, once",
+        1320,
+        790,
+        300,
+        90,
+        INTERNAL,
+    )
     fanout = {
         "prompts": (f"PromptBuilder\nContextPipeline\n{len(DEFAULT_SECTIONS)} Sections", 200),
         "guardrails": ("Guardrails\nDetectors, GuardrailProfile", 480),
@@ -283,6 +299,7 @@ def layers() -> Diagram:
     d.arrow("executor", "nodes", via=[(685, 625), (1240, 625)])
     d.arrow("nodes", "graphstate")
     d.arrow("nodes", "runtime", via=[(1240, 765), (740, 765)], label="RunRuntimeNode")
+    d.arrow("nodes", "matcher", via=[(1300, 765)], label="the routing nodes")
     for key, (_, x) in fanout.items():
         d.arrow("runtime", key, via=[(x + 120, 888)])
     d.arrow("registry", "knowledge", label="search_knowledge")
@@ -320,10 +337,12 @@ ASIDE = {NodeKey.HANDOFF: 980, NodeKey.FAILED: 1095}
 # Edges that would otherwise cut straight through the nodes between their ends.
 DETOURS: dict[tuple[NodeKey, NodeKey], list[tuple[float, float]]] = {
     (NodeKey.LOAD_STATE, NodeKey.FINALIZE): [(240, 328), (240, 1363)],
-    (NodeKey.ROUTE, NodeKey.FINALIZE): [(300, 558), (300, 1363)],
+    (NodeKey.SELECT_SOP, NodeKey.FINALIZE): [(300, 673), (300, 1380)],
     (NodeKey.GUARD_INPUT, NodeKey.PERSIST_STATE): [(360, 443), (360, 1248)],
+    (NodeKey.SELECT_SOP, NodeKey.PERSIST_STATE): [(410, 673), (410, 1225)],
     (NodeKey.GUARD_INPUT, NodeKey.HANDOFF): [(760, 443), (760, 1018)],
     (NodeKey.RUN_RUNTIME, NodeKey.FAILED): [(770, 1040), (770, 1133)],
+    (NodeKey.REVIEW_RESULT, NodeKey.HANDOFF): [(750, 1133), (750, 1056)],
 }
 
 
@@ -405,7 +424,10 @@ def turn_flow() -> Diagram:
         "legend",
         "grey nodes are PassThroughNode stubs waiting on a later phase\n"
         "red nodes end the turn without an answer from the model\n"
-        "dashed arrows are the same thing seen closer up, not a step",
+        "dashed arrows are the same thing seen closer up, not a step\n\n"
+        "select_sop scores every procedure once and both routing nodes read that one Ranking: "
+        f"within {AMBIGUITY} of each other and it asks which,\n"
+        f"and a procedure already under way is only abandoned for one {MARGIN} clear of it.",
         60,
         1560,
     )
@@ -583,7 +605,7 @@ def seams() -> Diagram:
             "knowledge",
             "what it can look up",
             "Embedder\nVectorStore",
-            "KnowledgeBase",
+            "KnowledgeBase and SopMatcher",
             CLIENT,
             ["OpenAiEmbedder", "HashEmbedder", "InMemoryVectorStore"],
         ),
@@ -696,11 +718,11 @@ PHASES = (
     Phase(
         "6",
         "Classifier routing",
-        False,
+        True,
         (
-            "fills select_sop, detect_sop_drift, review_result",
-            "adds transfer and rerun outcomes",
-            "a second SOP to route between",
+            "SopMatcher over the Embedder port, one ranking a turn",
+            "select_sop chooses, detect_sop_drift changes its mind",
+            "review_result escalates a conversation going nowhere",
         ),
     ),
     Phase(

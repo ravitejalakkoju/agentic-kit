@@ -52,6 +52,9 @@ class ToolResult:
     """Identifiers this call established. Read by memory, never shown to the model."""
     needs: tuple[str, ...] = ()
     """Keys the call could not proceed without, so the conversation can wait on them."""
+    finishes: bool = False
+    """The procedure is done. Carried here rather than inferred from the tool's
+    name, so the runtime never has to recognise a particular tool."""
 
     @classmethod
     def ok(cls, message: str, **data: Any) -> ToolResult:
@@ -60,6 +63,11 @@ class ToolResult:
     @classmethod
     def missing(cls, message: str) -> ToolResult:
         return cls(status=ToolStatus.NOT_FOUND, message=message)
+
+    @classmethod
+    def done(cls, message: str) -> ToolResult:
+        """The procedure has run its course; the conversation has not."""
+        return cls(status=ToolStatus.SUCCESS, message=message, finishes=True)
 
     @classmethod
     def rejected(cls, status: ToolStatus, message: str) -> ToolResult:

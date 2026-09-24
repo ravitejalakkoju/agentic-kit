@@ -10,11 +10,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
-from math import sqrt
 
 from ..domain.knowledge import Chunk, Passage, Shelved
+from ..domain.vectors import Vector, cosine
 from ..errors import KnowledgeError
-from ..ports.knowledge import Vector
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +39,7 @@ class InMemoryVectorStore:
     async def search(self, vector: Vector, limit: int) -> list[Passage]:
         async with self._lock:
             entries = list(self._entries)
-        scored = [Passage(entry.chunk, _similarity(vector, entry.vector)) for entry in entries]
+        scored = [Passage(entry.chunk, cosine(vector, entry.vector)) for entry in entries]
         scored.sort(key=lambda passage: passage.score, reverse=True)
         return scored[:limit]
 
@@ -83,13 +82,3 @@ class InMemoryVectorStore:
                 f"store holds {self._dimensions}-dimension vectors, got {len(vector)}: "
                 "the embedder changed and the store was not rebuilt"
             )
-
-
-def _similarity(left: Vector, right: Vector) -> float:
-    """Cosine: how far apart the two point, ignoring how long either is."""
-    size = _length(left) * _length(right)
-    return sum(a * b for a, b in zip(left, right, strict=True)) / size if size else 0.0
-
-
-def _length(vector: Vector) -> float:
-    return sqrt(sum(value * value for value in vector))

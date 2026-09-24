@@ -6,6 +6,7 @@ the engine has grown in a direction worth questioning first.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .adapters.dummy_llm import DummyLlm
@@ -20,7 +21,7 @@ from .adapters.sample_crm import (
 )
 from .adapters.vector_store import InMemoryVectorStore
 from .domain.crm import Order, Ticket
-from .domain.models import FlowKind
+from .domain.models import FlowKind, SopDefinition
 from .engine.ai_engine import AiEngine
 from .engine.flows.conversation import ConversationFlow
 from .engine.graph.executor import GraphExecutor
@@ -28,12 +29,14 @@ from .engine.graph.node import Node
 from .engine.graph.state import NodeKey
 from .engine.guardrails import (
     DEFAULT_PROFILE,
+    Detector,
     GuardrailProfile,
     GuardrailResponder,
     Guardrails,
     default_detectors,
 )
 from .engine.knowledge.base import KnowledgeBase
+from .engine.nodes.detect_sop_drift import DetectSopDriftNode
 from .engine.nodes.failed import FailedNode
 from .engine.nodes.finalize import FinalizeNode
 from .engine.nodes.guard_input import GuardInputNode
@@ -41,14 +44,18 @@ from .engine.nodes.handoff import HandoffNode
 from .engine.nodes.load_state import LoadStateNode
 from .engine.nodes.passthrough import PassThroughNode
 from .engine.nodes.persist_state import PersistStateNode
+from .engine.nodes.review_result import ReviewResultNode
 from .engine.nodes.route import RouteNode
 from .engine.nodes.run_runtime import RunRuntimeNode
+from .engine.nodes.select_sop import SelectSopNode
 from .engine.prompt.builder import PromptBuilder
 from .engine.prompt.context import ContactCollector, ContextPipeline, ResourceCollector
 from .engine.prompt.sections import DEFAULT_SECTIONS
+from .engine.routing.matcher import SopMatcher
 from .engine.runtime.text_runtime import TextRuntime
 from .engine.tools import (
     AddTicketNote,
+    FinishProcedure,
     LookupContact,
     LookupTicket,
     SearchKnowledge,
@@ -66,12 +73,9 @@ from .seed import (
 )
 from .settings import Settings
 
-STUBBED_NODES = (
-    NodeKey.SELECT_SOP,
-    NodeKey.DETECT_SOP_DRIFT,
-    NodeKey.BUILD_RUNTIME_REQUEST,
-    NodeKey.REVIEW_RESULT,
-)
+STUBBED_NODES = (NodeKey.BUILD_RUNTIME_REQUEST,)
+"""Still on the graph with nothing to do. `TextRuntime` already receives
+everything a request would be assembled from, so there is nothing to assemble."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +88,7 @@ class Components:
     tools: ToolRegistry
     crm: Crm
     knowledge: KnowledgeBase
+    matcher: SopMatcher
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +156,7 @@ def build_tools(crm: Crm, knowledge: KnowledgeBase | None = None) -> ToolRegistr
             LookupContact(crm.contacts),
             AddTicketNote(crm.ticket_notes),
             SearchKnowledge(knowledge or build_knowledge()),
+            FinishProcedure(),
         ]
     )
 
@@ -182,14 +188,19 @@ def build(
     settings: Settings,
     llm: LlmPort | None = None,
     profile: GuardrailProfile = DEFAULT_PROFILE,
+    detectors: Iterable[Detector] | None = None,
+    sops: list[SopDefinition] = DEFAULT_SOPS,
 ) -> Components:
+    """Everything wired together. The arguments are the seams worth swapping in a test."""
     conversations = InMemoryConversationStore()
     runs = InMemoryRunStore()
-    catalog = InMemorySopCatalog(DEFAULT_SOPS)
-    guardrails = Guardrails(default_detectors(), profile)
+    catalog = InMemorySopCatalog(sops)
+    guardrails = Guardrails(detectors or default_detectors(), profile)
     responder = GuardrailResponder()
     crm = build_crm()
-    knowledge = build_knowledge(build_embedder(settings), guardrails)
+    embedder = build_embedder(settings)
+    knowledge = build_knowledge(embedder, guardrails)
+    matcher = SopMatcher(catalog, embedder)
     prompts = build_prompts(profile.rules, crm)
     tools = build_tools(crm, knowledge)
     runtime = TextRuntime(llm or build_llm(settings), prompts, guardrails, responder, tools)
@@ -198,7 +209,10 @@ def build(
         LoadStateNode(conversations),
         GuardInputNode(guardrails, responder),
         RouteNode(catalog),
+        SelectSopNode(matcher),
+        DetectSopDriftNode(),
         RunRuntimeNode(runtime),
+        ReviewResultNode(),
         PersistStateNode(conversations, runs),
         HandoffNode(),
         FailedNode(),
@@ -217,4 +231,5 @@ def build(
         tools=tools,
         crm=crm,
         knowledge=knowledge,
+        matcher=matcher,
     )

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from agentic_kit.engine.graph.edges import EDGES, ENTRY
 from agentic_kit.errors import ProviderError
-from agentic_kit.seed import SUPPORT_SOP
+from agentic_kit.seed import DEFAULT_SOPS, SUPPORT_SOP
 
 from .fakes import ScriptedLlm
 
@@ -57,11 +57,11 @@ def test_unknown_conversation_is_404(client: TestClient) -> None:
     assert client.get("/v1/conversations/nope").status_code == 404
 
 
-def test_sops_lists_the_seeded_procedure(client: TestClient) -> None:
+def test_sops_lists_every_seeded_procedure(client: TestClient) -> None:
     response = client.get("/v1/sops")
 
     assert response.status_code == 200
-    assert [sop["sop_id"] for sop in response.json()] == [SUPPORT_SOP.sop_id]
+    assert [sop["sop_id"] for sop in response.json()] == [s.sop_id for s in DEFAULT_SOPS]
 
 
 def test_prompt_preview_returns_ordered_sections_without_calling_the_model(

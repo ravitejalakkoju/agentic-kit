@@ -37,20 +37,13 @@ class InMemoryRunStore:
 
 
 class InMemorySopCatalog:
-    """Holds the seeded procedures.
-
-    `match` returns the only procedure there is. Ranking by trigger examples
-    belongs here when a second procedure exists.
-    """
+    """Holds the seeded procedures, in the order they were seeded."""
 
     def __init__(self, sops: list[SopDefinition]) -> None:
         self._sops = {sop.sop_id: sop for sop in sops}
 
     async def get(self, sop_id: str) -> SopDefinition | None:
         return self._sops.get(sop_id)
-
-    async def match(self, text: str) -> SopDefinition | None:
-        return next(iter(self._sops.values()), None)
 
     async def list_all(self) -> list[SopDefinition]:
         return list(self._sops.values())

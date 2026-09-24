@@ -7,6 +7,7 @@ from dataclasses import replace
 from agentic_kit.composition import Components, build
 from agentic_kit.domain.models import (
     HISTORY_LIMIT,
+    MAX_ATTEMPTS,
     Role,
     TurnContext,
     TurnOutcome,
@@ -15,7 +16,7 @@ from agentic_kit.domain.models import (
 from agentic_kit.engine.guardrails.findings import Checkpoint, Mode
 from agentic_kit.engine.guardrails.profile import DEFAULT_PROFILE, CheckpointPolicy
 from agentic_kit.engine.guardrails.responder import HANDOFF_REPLY
-from agentic_kit.engine.nodes.failed import GIVE_UP_REPLY, MAX_ATTEMPTS, RETRY_REPLY
+from agentic_kit.engine.nodes.failed import GIVE_UP_REPLY, RETRY_REPLY
 from agentic_kit.errors import ProviderError
 from agentic_kit.seed import SUPPORT_SOP
 from agentic_kit.settings import Settings

@@ -37,6 +37,8 @@ class RuntimeReply:
     """Every tool the model used this turn, in the order it asked for them."""
     memory: MemoryUpdate = field(default_factory=MemoryUpdate)
     """What those tools learned, screened but not yet committed."""
+    finished: bool = False
+    """A tool reported the procedure done, so the next message routes afresh."""
 
 
 class TextRuntime:
@@ -66,7 +68,7 @@ class TextRuntime:
             return blocked
 
         messages = (*conversation.history, Message(role=Role.USER, text=request.text))
-        reply, used, learned = await self._converse(
+        reply, used, learned, finished = await self._converse(
             LlmRequest(system=prompt.system, messages=messages, tools=offered), request, memory
         )
 
@@ -76,16 +78,17 @@ class TextRuntime:
         # A blocked reply still keeps what the tools found; only the words were wrong.
         checked = self._check(Checkpoint.OUTPUT, request, reply.text)
         if checked is not None:
-            return replace(checked, memory=learned)
-        return RuntimeReply(text=reply.text, tool_calls=used, memory=learned)
+            return replace(checked, memory=learned, finished=finished)
+        return RuntimeReply(text=reply.text, tool_calls=used, memory=learned, finished=finished)
 
     async def _converse(
         self, ask: LlmRequest, request: TurnRequest, memory: WorkingMemory
-    ) -> tuple[LlmReply, tuple[ToolCall, ...], MemoryUpdate]:
+    ) -> tuple[LlmReply, tuple[ToolCall, ...], MemoryUpdate, bool]:
         """Trade tool calls with the model until it answers or runs out of rounds."""
         exchanges: list[ToolExchange] = []
         used: list[ToolCall] = []
         learned = MemoryUpdate()
+        finished = False
 
         for _ in range(MAX_TOOL_ROUNDS):
             reply = await self._llm.complete(
@@ -97,18 +100,19 @@ class TextRuntime:
                 )
             )
             if not reply.wants_tools:
-                return reply, tuple(used), learned
+                return reply, tuple(used), learned, finished
 
             used.extend(reply.tool_calls)
-            exchange, update = await self._run_tools(reply.tool_calls, request, memory)
+            exchange, update, done = await self._run_tools(reply.tool_calls, request, memory)
             exchanges.append(exchange)
             learned = learned.then(update)
+            finished = finished or done
 
-        return await self._final_answer(ask, exchanges), tuple(used), learned
+        return await self._final_answer(ask, exchanges), tuple(used), learned, finished
 
     async def _run_tools(
         self, calls: tuple[ToolCall, ...], request: TurnRequest, memory: WorkingMemory
-    ) -> tuple[ToolExchange, MemoryUpdate]:
+    ) -> tuple[ToolExchange, MemoryUpdate, bool]:
         results = await asyncio.gather(
             *(self._tools.execute(call, request, memory) for call in calls),
         )
@@ -118,7 +122,8 @@ class TextRuntime:
             results=tuple((call.id, result.for_model()) for call, result in paired),
         )
         update = MemoryUpdate.from_tools((call.name, result) for call, result in paired)
-        return exchange, self._screen(request, update)
+        finished = any(result.finishes for result in results)
+        return exchange, self._screen(request, update), finished
 
     def _screen(self, request: TurnRequest, update: MemoryUpdate) -> MemoryUpdate:
         """Drop facts carrying text that should never reach a later prompt.

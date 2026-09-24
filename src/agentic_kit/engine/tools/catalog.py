@@ -221,6 +221,44 @@ class SearchKnowledge:
         )
 
 
+class FinishProcedureArgs(ConfirmableArgs):
+    summary: str = Field(
+        description="One line on what was settled, for the record rather than the customer."
+    )
+
+
+class FinishProcedure:
+    """Closes off the procedure the conversation was following.
+
+    The agent says when it is done rather than the engine inferring it from a
+    reply that sounded conclusive. It is a write, so the registry makes the
+    model check first, which is the "anything else I can help with?" a person
+    would ask anyway.
+
+    Closes the procedure, never the conversation. The customer can keep
+    talking; the next thing they say is simply routed from scratch.
+    """
+
+    name = "finish_procedure"
+    description = (
+        "Mark the current procedure as finished once the customer's original request "
+        "is fully settled and they have nothing further on it. "
+        "Confirm with the customer before calling this."
+    )
+    safety = Safety.WRITE
+    args_model = FinishProcedureArgs
+    remembers = ()
+
+    def is_available(self, request: TurnRequest) -> bool:
+        return True
+
+    async def execute(self, args: FinishProcedureArgs, context: ToolContext) -> ToolResult:
+        return ToolResult.done(
+            "Noted as finished. Answer anything else from scratch rather than "
+            "assuming it belongs to this one."
+        )
+
+
 def _quote(passage: Passage) -> dict[str, str]:
     """A passage as the model reads it.
 

@@ -26,7 +26,9 @@ class PromptPreview(BaseModel):
 
 @router.post("/prompts/preview", summary="Preview the system prompt for a turn")
 async def preview_prompt(body: TurnRequest, wired: Wired) -> PromptPreview:
-    sop = await wired.catalog.match(body.text)
+    ranking = await wired.matcher.rank(body.text)
+    leaders = ranking.leaders
+    sop = leaders[0].sop if leaders else await wired.matcher.catch_all()
     if sop is None:
         raise HTTPException(status_code=404, detail="no procedure matched")
 

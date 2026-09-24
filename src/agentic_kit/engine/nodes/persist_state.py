@@ -30,17 +30,24 @@ class PersistStateNode:
         if state.reply:
             conversation.append(Message(role=Role.AGENT, text=state.reply))
 
-        if state.sop is not None:
+        if state.finished:
+            # The procedure is done, not the conversation: clearing it means the
+            # next message is routed afresh rather than refused.
+            conversation.active_sop_id = None
+            conversation.active_agent_id = None
+        elif state.sop is not None:
             conversation.active_sop_id = state.sop.sop_id
             conversation.active_agent_id = state.sop.agent_id
 
         if result.status is TurnStatus.RESPONDED:
             conversation.attempts = 0
 
+        # Named from the turn rather than the conversation, so a procedure that
+        # just finished is still on record as the one that ran.
         run = RunRecord(
             conversation_id=conversation.conversation_id,
-            agent_id=conversation.active_agent_id,
-            sop_id=conversation.active_sop_id,
+            agent_id=state.sop.agent_id if state.sop else conversation.active_agent_id,
+            sop_id=state.sop.sop_id if state.sop else conversation.active_sop_id,
             status=result.status,
             outcome=result.outcome,
         )

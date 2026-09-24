@@ -36,8 +36,15 @@ class HashEmbedder:
 
     name = "hash"
 
-    def __init__(self, dimensions: int = 256) -> None:
+    def __init__(self, dimensions: int = 8191) -> None:
         self.dimensions = dimensions
+        """Prime, and deliberately not a power of two.
+
+        Buckets are a hash modulo this number, so power-of-two sizes that
+        divide each other collide on the same pairs however far you scale up:
+        "hello" and "want" land together at 256 and are still together at 4096.
+        A prime has no such family to inherit from.
+        """
         self.min_score = 0.1
         """Lower than a real embedder's, because a short question and a long
         passage share few of the exact words that are all this can see."""
