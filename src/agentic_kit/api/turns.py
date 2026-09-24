@@ -1,20 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated
+from fastapi import APIRouter, HTTPException
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-
-from ..composition import Components
 from ..domain.models import ConversationState, FlowKind, SopDefinition, TurnRequest, TurnResult
+from .deps import Wired
 
 router = APIRouter(prefix="/v1", tags=["conversation"])
-
-
-def components(request: Request) -> Components:
-    return request.app.state.components
-
-
-Wired = Annotated[Components, Depends(components)]
 
 
 @router.post("/turns", summary="Run one conversation turn")

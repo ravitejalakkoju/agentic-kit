@@ -7,6 +7,7 @@ from agentic_kit.domain.models import (
     HISTORY_LIMIT,
     FlowKind,
     Role,
+    TurnContext,
     TurnOutcome,
     TurnRequest,
     TurnResult,
@@ -26,9 +27,28 @@ async def send(
     *,
     conversation_id: str = "conv-1",
     customer_id: str = "cust-1",
+    context: TurnContext | None = None,
 ) -> TurnResult:
-    request = TurnRequest(conversation_id=conversation_id, customer_id=customer_id, text=text)
+    request = TurnRequest(
+        conversation_id=conversation_id,
+        customer_id=customer_id,
+        text=text,
+        context=context or TurnContext(),
+    )
     return await components.engine.handle(FlowKind.CONVERSATION, request)
+
+
+async def test_order_named_in_the_turn_reaches_the_model_prompt(
+    components: Components, llm: ScriptedLlm
+) -> None:
+    llm.queue("It has shipped.")
+
+    await send(components, "Where is my order?", context=TurnContext(order_id="1001"))
+
+    [call] = llm.calls
+    assert '"order_id": "1001"' in call.system
+    assert '"status": "shipped"' in call.system
+    assert "Priya Sharma" in call.system
 
 
 async def test_reply_is_returned_and_the_turn_is_persisted(

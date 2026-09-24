@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from .adapters.dummy_llm import DummyLlm
 from .adapters.memory import InMemoryConversationStore, InMemoryRunStore, InMemorySopCatalog
 from .adapters.openai_llm import OpenAiLlm
+from .adapters.sample_crm import InMemoryContactReader, InMemoryRecordReader
 from .domain.models import FlowKind
 from .engine.ai_engine import AiEngine
 from .engine.flows.conversation import ConversationFlow
@@ -25,9 +26,12 @@ from .engine.nodes.passthrough import PassThroughNode
 from .engine.nodes.persist_state import PersistStateNode
 from .engine.nodes.route import RouteNode
 from .engine.nodes.run_runtime import RunRuntimeNode
+from .engine.prompt.builder import PromptBuilder
+from .engine.prompt.context import ContactCollector, ContextPipeline, ResourceCollector
+from .engine.prompt.sections import DEFAULT_SECTIONS
 from .engine.runtime.text_runtime import TextRuntime
 from .ports.llm import LlmPort
-from .seed import DEFAULT_SOPS
+from .seed import DEFAULT_SOPS, SAMPLE_CONTACTS, SAMPLE_ORDERS, SAMPLE_TICKETS
 from .settings import Settings
 
 STUBBED_NODES = (
@@ -44,6 +48,20 @@ class Components:
     conversations: InMemoryConversationStore
     runs: InMemoryRunStore
     catalog: InMemorySopCatalog
+    prompts: PromptBuilder
+
+
+def build_prompts() -> PromptBuilder:
+    orders = InMemoryRecordReader(SAMPLE_ORDERS, id_of=lambda order: order.order_id)
+    tickets = InMemoryRecordReader(SAMPLE_TICKETS, id_of=lambda ticket: ticket.ticket_id)
+    context = ContextPipeline(
+        [
+            ContactCollector(InMemoryContactReader(SAMPLE_CONTACTS)),
+            ResourceCollector("order", orders, id_of=lambda ctx: ctx.order_id),
+            ResourceCollector("ticket", tickets, id_of=lambda ctx: ctx.ticket_id),
+        ]
+    )
+    return PromptBuilder(context, DEFAULT_SECTIONS)
 
 
 def build_llm(settings: Settings) -> LlmPort:
@@ -61,7 +79,8 @@ def build(settings: Settings, llm: LlmPort | None = None) -> Components:
     conversations = InMemoryConversationStore()
     runs = InMemoryRunStore()
     catalog = InMemorySopCatalog(DEFAULT_SOPS)
-    runtime = TextRuntime(llm or build_llm(settings))
+    prompts = build_prompts()
+    runtime = TextRuntime(llm or build_llm(settings), prompts)
 
     nodes: list[Node] = [
         LoadStateNode(conversations),
@@ -76,4 +95,6 @@ def build(settings: Settings, llm: LlmPort | None = None) -> Components:
 
     executor = GraphExecutor({node.key: node for node in nodes})
     engine = AiEngine({FlowKind.CONVERSATION: ConversationFlow(executor)})
-    return Components(engine=engine, conversations=conversations, runs=runs, catalog=catalog)
+    return Components(
+        engine=engine, conversations=conversations, runs=runs, catalog=catalog, prompts=prompts
+    )

@@ -55,10 +55,21 @@ class TurnOutcome(StrEnum):
     FAILED = "FAILED"
 
 
+class TurnContext(BaseModel):
+    """What the caller already knows about this turn. Collectors look records up from it."""
+
+    channel: str = "chat"
+    email: str | None = None
+    phone: str | None = None
+    order_id: str | None = None
+    ticket_id: str | None = None
+
+
 class TurnRequest(BaseModel):
     conversation_id: str
     customer_id: str
     text: str
+    context: TurnContext = Field(default_factory=TurnContext)
 
 
 class TurnResult(BaseModel):
@@ -83,7 +94,11 @@ class SopDefinition(BaseModel):
     description: str
     instructions: str
     examples: list[str] = Field(default_factory=list)
+    """Customer utterances that should route here. Used for matching, never shown as replies."""
     personality: Personality
+    response_strategy: str | None = None
+    example_responses: list[str] = Field(default_factory=list)
+    """Replies that show the intended style. Rendered as style guidance only."""
 
 
 class ConversationState(BaseModel):

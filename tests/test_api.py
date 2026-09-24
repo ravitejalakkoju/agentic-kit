@@ -64,6 +64,20 @@ def test_sops_lists_the_seeded_procedure(client: TestClient) -> None:
     assert [sop["sop_id"] for sop in response.json()] == [SUPPORT_SOP.sop_id]
 
 
+def test_prompt_preview_returns_ordered_sections_without_calling_the_model(
+    client: TestClient, llm: ScriptedLlm
+) -> None:
+    response = client.post("/v1/prompts/preview", json={**TURN, "context": {"order_id": "1001"}})
+
+    assert response.status_code == 200
+    body = response.json()
+    priorities = [section["priority"] for section in body["sections"]]
+    assert priorities == sorted(priorities)
+    assert body["sop_id"] == SUPPORT_SOP.sop_id
+    assert '"status": "shipped"' in body["system"]
+    assert llm.calls == []
+
+
 def test_graph_mirrors_the_edge_table(client: TestClient) -> None:
     response = client.get("/v1/graph")
 

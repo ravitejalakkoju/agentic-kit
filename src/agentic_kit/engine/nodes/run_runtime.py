@@ -23,7 +23,7 @@ class RunRuntimeNode:
             reply = await self._runtime.run(
                 sop=state.sop,
                 conversation=state.conversation,
-                text=state.request.text,
+                request=state.request,
             )
         except ProviderError as error:
             state.result = TurnResult(
