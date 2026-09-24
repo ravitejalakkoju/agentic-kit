@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from .api import graph, prompts, turns
+from .api import graph, prompts, tools, turns
 from .composition import build
 from .errors import EngineError, ProviderError
 from .ports.llm import LlmPort
@@ -35,6 +35,7 @@ def create_app(settings: Settings | None = None, llm: LlmPort | None = None) -> 
     app.include_router(turns.router)
     app.include_router(graph.router)
     app.include_router(prompts.router)
+    app.include_router(tools.router)
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, bool]:

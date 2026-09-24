@@ -78,6 +78,24 @@ def test_prompt_preview_returns_ordered_sections_without_calling_the_model(
     assert llm.calls == []
 
 
+def test_prompt_preview_shows_the_tool_rules_the_model_would_get(client: TestClient) -> None:
+    response = client.post("/v1/prompts/preview", json=TURN)
+
+    keys = [section["key"] for section in response.json()["sections"]]
+    assert "tool_catalog" in keys
+
+
+def test_tools_lists_the_catalog_with_schemas(client: TestClient) -> None:
+    response = client.get("/v1/tools")
+
+    assert response.status_code == 200
+    body = response.json()
+    by_name = {tool["name"]: tool for tool in body}
+    assert {"track_order", "lookup_ticket", "lookup_contact", "add_ticket_note"} <= set(by_name)
+    assert by_name["add_ticket_note"]["safety"] == "write"
+    assert "note" in by_name["add_ticket_note"]["parameters"]["properties"]
+
+
 def test_graph_mirrors_the_edge_table(client: TestClient) -> None:
     response = client.get("/v1/graph")
 

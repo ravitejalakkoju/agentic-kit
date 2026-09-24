@@ -5,9 +5,6 @@ from ...errors import EngineError
 from ...ports.stores import SopCatalog
 from ..graph.state import GraphState, NodeKey, Outcome
 
-POLICY_PHRASES = ("fraud", "hack account", "abuse")
-POLICY_REPLY = "I am bringing in a human teammate to help with this."
-
 
 class RouteNode:
     """Picks the procedure for this turn, or refuses to run one.
@@ -18,7 +15,7 @@ class RouteNode:
     """
 
     key = NodeKey.ROUTE
-    outcomes = frozenset({Outcome.CONTINUE, Outcome.NO_MATCH, Outcome.HANDOFF})
+    outcomes = frozenset({Outcome.CONTINUE, Outcome.NO_MATCH})
 
     def __init__(self, catalog: SopCatalog) -> None:
         self._catalog = catalog
@@ -27,17 +24,6 @@ class RouteNode:
         conversation = state.conversation
         if conversation is None:
             raise EngineError("routing reached without a conversation")
-
-        text = state.request.text.lower()
-        if any(phrase in text for phrase in POLICY_PHRASES):
-            state.reply = POLICY_REPLY
-            state.result = TurnResult(
-                status=TurnStatus.HANDOFF,
-                outcome=TurnOutcome.POLICY_BLOCK,
-                reply=POLICY_REPLY,
-                reason="matched a policy phrase",
-            )
-            return Outcome.HANDOFF
 
         sop = None
         if conversation.active_sop_id:

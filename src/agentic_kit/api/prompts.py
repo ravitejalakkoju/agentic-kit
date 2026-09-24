@@ -30,7 +30,7 @@ async def preview_prompt(body: TurnRequest, wired: Wired) -> PromptPreview:
     if sop is None:
         raise HTTPException(status_code=404, detail="no procedure matched")
 
-    prompt = await wired.prompts.build(sop=sop, request=body)
+    prompt = await wired.prompts.build(sop=sop, request=body, tools=wired.tools.definitions(body))
     return PromptPreview(
         sop_id=sop.sop_id,
         sections=[

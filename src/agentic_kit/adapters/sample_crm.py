@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable
 
 from pydantic import BaseModel
 
-from ..domain.crm import Contact
+from ..domain.crm import Contact, Ticket
 
 
 class InMemoryContactReader:
@@ -25,3 +25,17 @@ class InMemoryRecordReader[RecordT: BaseModel]:
     async def get(self, record_id: str) -> RecordT | None:
         record = self._records.get(record_id)
         return record.model_copy() if record else None
+
+
+class InMemoryTicketNotes:
+    """Notes written against seeded tickets, so a write tool has somewhere to go."""
+
+    def __init__(self, tickets: InMemoryRecordReader[Ticket]) -> None:
+        self._tickets = tickets
+        self.notes: dict[str, list[str]] = {}
+
+    async def add_note(self, ticket_id: str, note: str) -> bool:
+        if await self._tickets.get(ticket_id) is None:
+            return False
+        self.notes.setdefault(ticket_id, []).append(note)
+        return True

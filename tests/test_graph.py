@@ -24,6 +24,16 @@ def test_composed_graph_passes_validation(components: Components) -> None:
     assert components.engine is not None
 
 
+def test_input_screening_sits_between_loading_and_routing() -> None:
+    assert EDGES[(NodeKey.LOAD_STATE, Outcome.CONTINUE)] is NodeKey.GUARD_INPUT
+    assert EDGES[(NodeKey.GUARD_INPUT, Outcome.CONTINUE)] is NodeKey.ROUTE
+
+
+def test_a_blocked_turn_is_still_written_down() -> None:
+    assert EDGES[(NodeKey.GUARD_INPUT, Outcome.BLOCKED)] is NodeKey.PERSIST_STATE
+    assert EDGES[(NodeKey.GUARD_INPUT, Outcome.HANDOFF)] is NodeKey.HANDOFF
+
+
 def test_every_edge_target_is_a_known_node() -> None:
     targets = {target for target in EDGES.values() if target is not None}
     assert targets <= set(NodeKey)

@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
-from ..domain.models import Message, Role
+from ..domain.models import Role
+from ..ports.llm import LlmReply, LlmRequest
 
 
 class DummyLlm:
     name = "dummy"
 
-    async def complete(self, *, system: str, messages: Sequence[Message]) -> str:
+    async def complete(self, request: LlmRequest) -> LlmReply:
         last_user = next(
-            (message.text for message in reversed(messages) if message.role is Role.USER),
+            (message.text for message in reversed(request.messages) if message.role is Role.USER),
             "",
         )
-        return (
-            f'You said: "{last_user}". '
-            "This is the offline model; set a real OPENAI_API_KEY for live replies."
+        return LlmReply(
+            text=(
+                f'You said: "{last_user}". '
+                "This is the offline model; set a real OPENAI_API_KEY for live replies."
+            )
         )

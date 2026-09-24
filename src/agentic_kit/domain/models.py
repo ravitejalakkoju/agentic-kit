@@ -41,6 +41,7 @@ class Message(BaseModel):
 class TurnStatus(StrEnum):
     RESPONDED = "responded"
     NOOP = "noop"
+    BLOCKED = "blocked"
     HANDOFF = "handoff"
     ENDED = "ended"
     FAILED = "failed"
@@ -52,6 +53,7 @@ class TurnOutcome(StrEnum):
     RUN_ENDED = "RUN_ENDED"
     POLICY_BLOCK = "POLICY_BLOCK"
     USER_REQUESTED_HUMAN = "USER_REQUESTED_HUMAN"
+    MAX_ATTEMPTS = "MAX_ATTEMPTS"
     FAILED = "FAILED"
 
 

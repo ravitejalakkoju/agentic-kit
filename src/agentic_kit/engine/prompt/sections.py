@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ...domain.models import TurnRequest
+from ...domain.tools import ToolDefinition
 from .context import ContextBag
 from .policy import PromptPolicy
 
@@ -23,6 +24,8 @@ class PromptInput:
     request: TurnRequest
     policy: PromptPolicy
     context: ContextBag
+    tools: tuple[ToolDefinition, ...] = ()
+    """The tools this turn was offered, so the prompt matches what the model can call."""
 
 
 class Section(Protocol):
@@ -153,6 +156,31 @@ class RuntimeContextSection:
         return "\n\n".join(["Treat this data as the source of truth for this turn.", *blocks])
 
 
+class ToolCatalogSection:
+    """How to use tools, not what they are.
+
+    The schemas go to the model through the provider, so repeating them here
+    would only be a second copy to keep in step.
+    """
+
+    key = "tool_catalog"
+    title = "Tool Use"
+    priority = 250
+
+    def render(self, prompt: PromptInput) -> str | None:
+        if not prompt.tools:
+            return None
+        return _bullets(
+            [
+                "Use a tool whenever you need live data instead of guessing.",
+                "Never say an action worked unless the tool result says it did.",
+                "Ask the customer for anything a tool needs and you do not have.",
+                "Before any tool that changes data, say what you will do and get a clear yes.",
+                "Never show tool names, arguments, or raw results to the customer.",
+            ]
+        )
+
+
 class ResponseStrategySection:
     key = "response_strategy"
     title = "Response Strategy"
@@ -196,6 +224,7 @@ DEFAULT_SECTIONS: tuple[Section, ...] = (
     GuardrailSection(),
     SopSection(),
     RuntimeContextSection(),
+    ToolCatalogSection(),
     ResponseStrategySection(),
     ExampleResponsesSection(),
 )

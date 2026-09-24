@@ -20,3 +20,9 @@ class RecordReader[RecordT: BaseModel](Protocol):
     """Looks one record up by id. Orders and tickets share this shape."""
 
     async def get(self, record_id: str) -> RecordT | None: ...
+
+
+class TicketWriter(Protocol):
+    async def add_note(self, ticket_id: str, note: str) -> bool:
+        """Record a note against a ticket. False when there is no such ticket."""
+        ...

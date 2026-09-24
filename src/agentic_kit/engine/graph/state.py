@@ -10,6 +10,7 @@ from ...domain.models import ConversationState, SopDefinition, TurnRequest, Turn
 
 class NodeKey(StrEnum):
     LOAD_STATE = "load_state"
+    GUARD_INPUT = "guard_input"
     ROUTE = "route"
     SELECT_SOP = "select_sop"
     DETECT_SOP_DRIFT = "detect_sop_drift"
@@ -27,6 +28,7 @@ class Outcome(StrEnum):
 
     CONTINUE = "continue"
     NO_MATCH = "no_match"
+    BLOCKED = "blocked"
     HANDOFF = "handoff"
     ENDED = "ended"
     FAILED = "failed"

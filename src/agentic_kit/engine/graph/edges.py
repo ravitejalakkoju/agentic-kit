@@ -21,16 +21,19 @@ ENTRY: Final[NodeKey] = NodeKey.LOAD_STATE
 
 EDGES: Final[Mapping[Edge, NodeKey | None]] = MappingProxyType(
     {
-        (NodeKey.LOAD_STATE, Outcome.CONTINUE): NodeKey.ROUTE,
+        (NodeKey.LOAD_STATE, Outcome.CONTINUE): NodeKey.GUARD_INPUT,
         (NodeKey.LOAD_STATE, Outcome.NO_MATCH): NodeKey.FINALIZE,
         (NodeKey.LOAD_STATE, Outcome.ENDED): NodeKey.FINALIZE,
+        (NodeKey.GUARD_INPUT, Outcome.CONTINUE): NodeKey.ROUTE,
+        (NodeKey.GUARD_INPUT, Outcome.BLOCKED): NodeKey.PERSIST_STATE,
+        (NodeKey.GUARD_INPUT, Outcome.HANDOFF): NodeKey.HANDOFF,
         (NodeKey.ROUTE, Outcome.CONTINUE): NodeKey.SELECT_SOP,
         (NodeKey.ROUTE, Outcome.NO_MATCH): NodeKey.FINALIZE,
-        (NodeKey.ROUTE, Outcome.HANDOFF): NodeKey.HANDOFF,
         (NodeKey.SELECT_SOP, Outcome.CONTINUE): NodeKey.DETECT_SOP_DRIFT,
         (NodeKey.DETECT_SOP_DRIFT, Outcome.CONTINUE): NodeKey.BUILD_RUNTIME_REQUEST,
         (NodeKey.BUILD_RUNTIME_REQUEST, Outcome.CONTINUE): NodeKey.RUN_RUNTIME,
         (NodeKey.RUN_RUNTIME, Outcome.CONTINUE): NodeKey.REVIEW_RESULT,
+        (NodeKey.RUN_RUNTIME, Outcome.HANDOFF): NodeKey.HANDOFF,
         (NodeKey.RUN_RUNTIME, Outcome.FAILED): NodeKey.FAILED,
         (NodeKey.REVIEW_RESULT, Outcome.CONTINUE): NodeKey.PERSIST_STATE,
         (NodeKey.HANDOFF, Outcome.CONTINUE): NodeKey.PERSIST_STATE,

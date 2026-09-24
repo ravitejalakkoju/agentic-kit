@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import pytest
 
 from agentic_kit.domain.crm import Order
 from agentic_kit.domain.models import Personality, TurnContext, TurnRequest
+from agentic_kit.domain.tools import Safety, ToolDefinition
+from agentic_kit.engine.guardrails.profile import DEFAULT_RULES
 from agentic_kit.engine.prompt.builder import PromptBuilder
 from agentic_kit.engine.prompt.context import ContextBag, ContextPipeline, Resource
 from agentic_kit.engine.prompt.policy import DEFAULT_RESPONSE_STRATEGY, PromptPolicy
@@ -17,6 +19,7 @@ from agentic_kit.engine.prompt.sections import (
     PromptInput,
     RuntimeContextSection,
     SopSection,
+    ToolCatalogSection,
 )
 from agentic_kit.seed import SAMPLE_ORDERS, SUPPORT_SOP
 
@@ -28,13 +31,25 @@ REQUEST = TurnRequest(
 )
 
 
+A_TOOL = ToolDefinition(
+    name="track_order", description="Track an order.", parameters={}, safety=Safety.READ
+)
+
+
 def prompt_input(
-    *, sop=SUPPORT_SOP, context: ContextBag | None = None, rules: tuple[str, ...] | None = None
+    *,
+    sop=SUPPORT_SOP,
+    context: ContextBag | None = None,
+    rules: tuple[str, ...] = DEFAULT_RULES,
+    tools: tuple[ToolDefinition, ...] = (A_TOOL,),
 ) -> PromptInput:
-    policy = PromptPolicy.for_turn(sop, REQUEST)
-    if rules is not None:
-        policy = replace(policy, guardrail_rules=rules)
-    return PromptInput(request=REQUEST, policy=policy, context=context or ContextBag())
+    policy = PromptPolicy.for_turn(sop, REQUEST, rules)
+    return PromptInput(
+        request=REQUEST,
+        policy=policy,
+        context=context or ContextBag(),
+        tools=tools,
+    )
 
 
 def test_default_sections_have_unique_keys_and_priorities() -> None:
@@ -75,6 +90,17 @@ def test_guardrails_are_left_out_when_there_are_no_rules() -> None:
 
 def test_sop_section_carries_the_instructions() -> None:
     assert SUPPORT_SOP.instructions in SopSection().render(prompt_input())
+
+
+def test_tool_rules_are_left_out_when_no_tool_is_offered() -> None:
+    assert ToolCatalogSection().render(prompt_input(tools=())) is None
+
+
+def test_tool_rules_do_not_repeat_the_schemas() -> None:
+    content = ToolCatalogSection().render(prompt_input())
+
+    assert content is not None
+    assert "track_order" not in content
 
 
 def test_examples_are_left_out_when_the_sop_has_none() -> None:

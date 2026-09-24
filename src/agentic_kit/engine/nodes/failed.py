@@ -34,7 +34,7 @@ class FailedNode:
         state.reply = GIVE_UP_REPLY if exhausted else RETRY_REPLY
         state.result = TurnResult(
             status=TurnStatus.HANDOFF if exhausted else TurnStatus.FAILED,
-            outcome=TurnOutcome.USER_REQUESTED_HUMAN if exhausted else TurnOutcome.FAILED,
+            outcome=TurnOutcome.MAX_ATTEMPTS if exhausted else TurnOutcome.FAILED,
             reply=state.reply,
             reason=reason,
         )

@@ -40,4 +40,12 @@ class LoadStateNode:
             )
             return Outcome.ENDED
 
+        if conversation.human_handoff_requested:
+            state.result = TurnResult(
+                status=TurnStatus.NOOP,
+                outcome=TurnOutcome.USER_REQUESTED_HUMAN,
+                reason="waiting for a human teammate",
+            )
+            return Outcome.NO_MATCH
+
         return Outcome.CONTINUE

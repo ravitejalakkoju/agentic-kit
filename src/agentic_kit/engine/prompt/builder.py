@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ...domain.models import SopDefinition, TurnRequest
+from ...domain.tools import ToolDefinition
 from .context import ContextBag, ContextPipeline
 from .policy import PromptPolicy
 from .sections import PromptInput, Section
@@ -27,15 +28,28 @@ class BuiltPrompt:
 
 
 class PromptBuilder:
-    def __init__(self, context: ContextPipeline, sections: Sequence[Section]) -> None:
+    def __init__(
+        self,
+        context: ContextPipeline,
+        sections: Sequence[Section],
+        rules: tuple[str, ...] = (),
+    ) -> None:
         self._context = context
         self._sections = tuple(sorted(sections, key=lambda section: section.priority))
+        self._rules = rules
 
-    async def build(self, *, sop: SopDefinition, request: TurnRequest) -> BuiltPrompt:
+    async def build(
+        self,
+        *,
+        sop: SopDefinition,
+        request: TurnRequest,
+        tools: tuple[ToolDefinition, ...] = (),
+    ) -> BuiltPrompt:
         prompt = PromptInput(
             request=request,
-            policy=PromptPolicy.for_turn(sop, request),
+            policy=PromptPolicy.for_turn(sop, request, self._rules),
             context=await self._context.collect(request),
+            tools=tools,
         )
         rendered = tuple(
             RenderedSection(section.key, section.title, section.priority, content)
