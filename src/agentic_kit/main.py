@@ -10,39 +10,44 @@ from fastapi.responses import JSONResponse
 from .api import graph, turns
 from .composition import build
 from .errors import EngineError, ProviderError
-from .settings import load_settings
+from .ports.llm import LlmPort
+from .settings import Settings, load_settings
 
 logging.basicConfig(level=logging.INFO)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = load_settings()
-    app.state.settings = settings
-    app.state.components = build(settings)
-    yield
+def create_app(settings: Settings | None = None, llm: LlmPort | None = None) -> FastAPI:
+    """Build the HTTP app. Tests pass their own settings and model; the server passes neither."""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        resolved = settings or load_settings()
+        app.state.settings = resolved
+        app.state.components = build(resolved, llm)
+        yield
+
+    app = FastAPI(
+        title="agentic-kit",
+        version="0.1.0",
+        summary="A conversation engine you can read: graph in, reply out.",
+        lifespan=lifespan,
+    )
+    app.include_router(turns.router)
+    app.include_router(graph.router)
+
+    @app.get("/health", tags=["ops"])
+    async def health() -> dict[str, bool]:
+        return {"ok": True}
+
+    @app.exception_handler(ProviderError)
+    async def handle_provider_error(_: Request, error: ProviderError) -> JSONResponse:
+        return JSONResponse(status_code=502, content={"detail": str(error)})
+
+    @app.exception_handler(EngineError)
+    async def handle_engine_error(_: Request, error: EngineError) -> JSONResponse:
+        return JSONResponse(status_code=500, content={"detail": str(error)})
+
+    return app
 
 
-app = FastAPI(
-    title="agentic-kit",
-    version="0.1.0",
-    summary="A conversation engine you can read: graph in, reply out.",
-    lifespan=lifespan,
-)
-app.include_router(turns.router)
-app.include_router(graph.router)
-
-
-@app.get("/health", tags=["ops"])
-async def health() -> dict[str, bool]:
-    return {"ok": True}
-
-
-@app.exception_handler(ProviderError)
-async def handle_provider_error(_: Request, error: ProviderError) -> JSONResponse:
-    return JSONResponse(status_code=502, content={"detail": str(error)})
-
-
-@app.exception_handler(EngineError)
-async def handle_engine_error(_: Request, error: EngineError) -> JSONResponse:
-    return JSONResponse(status_code=500, content={"detail": str(error)})
+app = create_app()
