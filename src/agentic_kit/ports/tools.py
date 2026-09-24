@@ -6,11 +6,12 @@ shown and the validation the arguments go through are the same thing.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from pydantic import BaseModel
 
+from ..domain.memory import WorkingMemory
 from ..domain.models import TurnRequest
 from ..domain.tools import Safety, ToolResult
 
@@ -19,11 +20,20 @@ from ..domain.tools import Safety, ToolResult
 class ToolContext:
     """What a tool knows besides its arguments.
 
-    The turn carries ids the customer never repeats, so a tool can fall back to
-    the order or ticket already in context when the model leaves it out.
+    The turn carries ids the customer never repeats and memory carries the ones
+    an earlier tool established, so a tool can fill in an argument the model
+    left out rather than asking for it again.
     """
 
     request: TurnRequest
+    memory: WorkingMemory = field(default_factory=WorkingMemory)
+
+    def resolve(self, key: str, *candidates: str | None) -> str | None:
+        """The first value this turn supplied, or else what an earlier tool learned.
+
+        This turn wins on purpose: a caller who names an order means that one.
+        """
+        return next((value for value in candidates if value), None) or self.memory.recall(key)
 
 
 class ConfirmableArgs(BaseModel):
@@ -41,6 +51,8 @@ class Tool[ArgsT: BaseModel](Protocol):
     description: str
     safety: Safety
     args_model: type[ArgsT]
+    remembers: tuple[str, ...]
+    """The fact keys this tool may write. The registry drops anything else it reports."""
 
     def is_available(self, request: TurnRequest) -> bool:
         """Whether this turn may use the tool at all."""

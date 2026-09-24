@@ -14,6 +14,8 @@ from .findings import Action, Checkpoint, Finding, GuardrailContext, Level
 
 INPUT = frozenset({Checkpoint.INPUT})
 OUTPUT = frozenset({Checkpoint.OUTPUT})
+UNTRUSTED = frozenset({Checkpoint.INPUT, Checkpoint.MEMORY})
+"""Both places text the agent did not write reaches the agent."""
 
 
 class Detector(Protocol):
@@ -52,7 +54,7 @@ class PromptInjectionDetector:
     """Attempts to talk the agent out of its own instructions."""
 
     id = "prompt_injection"
-    checkpoints = INPUT
+    checkpoints = UNTRUSTED
 
     FAIL_PATTERNS = (
         re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions", re.I),

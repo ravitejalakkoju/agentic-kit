@@ -30,7 +30,15 @@ async def preview_prompt(body: TurnRequest, wired: Wired) -> PromptPreview:
     if sop is None:
         raise HTTPException(status_code=404, detail="no procedure matched")
 
-    prompt = await wired.prompts.build(sop=sop, request=body, tools=wired.tools.definitions(body))
+    # The preview is only worth having if it is the prompt the model would get,
+    # so it reads the same remembered facts a real turn would.
+    conversation = await wired.conversations.get(body.conversation_id)
+    prompt = await wired.prompts.build(
+        sop=sop,
+        request=body,
+        tools=wired.tools.definitions(body),
+        memory=conversation.memory if conversation else None,
+    )
     return PromptPreview(
         sop_id=sop.sop_id,
         sections=[

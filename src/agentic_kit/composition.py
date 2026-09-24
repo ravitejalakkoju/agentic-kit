@@ -92,8 +92,12 @@ def build_prompts(rules: tuple[str, ...] = (), crm: Crm | None = None) -> Prompt
     context = ContextPipeline(
         [
             ContactCollector(crm.contacts),
-            ResourceCollector("order", crm.orders, id_of=lambda ctx: ctx.order_id),
-            ResourceCollector("ticket", crm.tickets, id_of=lambda ctx: ctx.ticket_id),
+            ResourceCollector(
+                "order", crm.orders, id_of=lambda ctx: ctx.order_id, fact_key="order_id"
+            ),
+            ResourceCollector(
+                "ticket", crm.tickets, id_of=lambda ctx: ctx.ticket_id, fact_key="ticket_id"
+            ),
         ]
     )
     return PromptBuilder(context, DEFAULT_SECTIONS, rules)

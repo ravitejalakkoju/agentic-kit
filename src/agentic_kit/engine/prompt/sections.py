@@ -8,9 +8,10 @@ here plus one entry in DEFAULT_SECTIONS.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from ...domain.memory import WorkingMemory
 from ...domain.models import TurnRequest
 from ...domain.tools import ToolDefinition
 from .context import ContextBag
@@ -26,6 +27,8 @@ class PromptInput:
     context: ContextBag
     tools: tuple[ToolDefinition, ...] = ()
     """The tools this turn was offered, so the prompt matches what the model can call."""
+    memory: WorkingMemory = field(default_factory=WorkingMemory)
+    """What earlier turns established."""
 
 
 class Section(Protocol):
@@ -156,6 +159,32 @@ class RuntimeContextSection:
         return "\n\n".join(["Treat this data as the source of truth for this turn.", *blocks])
 
 
+class WorkingMemorySection:
+    """What earlier turns established, and what the agent is still waiting on.
+
+    Each fact names the tool that established it, because the model should
+    weigh a value it looked up itself differently from one it was told. The
+    superseded archive is left out: it exists for people reading back.
+    """
+
+    key = "working_memory"
+    title = "Working Memory"
+    priority = 150
+
+    def render(self, prompt: PromptInput) -> str | None:
+        memory = prompt.memory
+        blocks = []
+        if memory.facts:
+            known = [
+                f"{fact.key}: {fact.value} (from {fact.source})" for fact in memory.facts.values()
+            ]
+            blocks.append("\n".join(["Known from this conversation:", _bullets(known)]))
+        if memory.pending:
+            waiting = [want.prompt for want in memory.pending.values()]
+            blocks.append("\n".join(["Still waiting on:", _bullets(waiting)]))
+        return "\n\n".join(blocks) or None
+
+
 class ToolCatalogSection:
     """How to use tools, not what they are.
 
@@ -224,6 +253,7 @@ DEFAULT_SECTIONS: tuple[Section, ...] = (
     GuardrailSection(),
     SopSection(),
     RuntimeContextSection(),
+    WorkingMemorySection(),
     ToolCatalogSection(),
     ResponseStrategySection(),
     ExampleResponsesSection(),

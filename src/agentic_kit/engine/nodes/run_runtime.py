@@ -35,6 +35,7 @@ class RunRuntimeNode:
             return Outcome.FAILED
 
         state.reply = reply.text
+        state.memory = reply.memory
         state.result = self._result_for(reply)
         return Outcome.HANDOFF if state.result.status is TurnStatus.HANDOFF else Outcome.CONTINUE
 

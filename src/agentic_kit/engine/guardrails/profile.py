@@ -43,6 +43,10 @@ DEFAULT_PROFILE = GuardrailProfile(
             detector_ids=("policy_phrase", "prompt_injection", "input_length"),
         ),
         Checkpoint.PROMPT: CheckpointPolicy(mode=Mode.DISABLED),
+        Checkpoint.MEMORY: CheckpointPolicy(
+            mode=Mode.ENFORCE,
+            detector_ids=("prompt_injection",),
+        ),
         Checkpoint.OUTPUT: CheckpointPolicy(
             mode=Mode.OBSERVE,
             detector_ids=("code_fence_reply", "markup_reply", "response_length"),

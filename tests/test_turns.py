@@ -7,12 +7,9 @@ from dataclasses import replace
 from agentic_kit.composition import Components, build
 from agentic_kit.domain.models import (
     HISTORY_LIMIT,
-    FlowKind,
     Role,
     TurnContext,
     TurnOutcome,
-    TurnRequest,
-    TurnResult,
     TurnStatus,
 )
 from agentic_kit.engine.guardrails.findings import Checkpoint, Mode
@@ -23,24 +20,7 @@ from agentic_kit.errors import ProviderError
 from agentic_kit.seed import SUPPORT_SOP
 from agentic_kit.settings import Settings
 
-from .fakes import ScriptedLlm, calls, tool_call
-
-
-async def send(
-    components: Components,
-    text: str,
-    *,
-    conversation_id: str = "conv-1",
-    customer_id: str = "cust-1",
-    context: TurnContext | None = None,
-) -> TurnResult:
-    request = TurnRequest(
-        conversation_id=conversation_id,
-        customer_id=customer_id,
-        text=text,
-        context=context or TurnContext(),
-    )
-    return await components.engine.handle(FlowKind.CONVERSATION, request)
+from .fakes import ScriptedLlm, calls, send, tool_call
 
 
 async def test_order_named_in_the_turn_reaches_the_model_prompt(

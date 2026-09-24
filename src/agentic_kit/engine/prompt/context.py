@@ -14,6 +14,7 @@ from typing import Protocol
 from pydantic import BaseModel
 
 from ...domain.crm import Contact
+from ...domain.memory import WorkingMemory
 from ...domain.models import TurnContext, TurnRequest
 from ...ports.readers import ContactReader, RecordReader
 
@@ -43,7 +44,7 @@ class ContextBag:
 class Collector(Protocol):
     name: str
 
-    async def collect(self, request: TurnRequest) -> ContextBag: ...
+    async def collect(self, request: TurnRequest, memory: WorkingMemory) -> ContextBag: ...
 
 
 class ContextPipeline:
@@ -56,11 +57,11 @@ class ContextPipeline:
     def __init__(self, collectors: Sequence[Collector]) -> None:
         self._collectors = tuple(collectors)
 
-    async def collect(self, request: TurnRequest) -> ContextBag:
+    async def collect(self, request: TurnRequest, memory: WorkingMemory) -> ContextBag:
         bag = ContextBag()
         for collector in self._collectors:
             try:
-                bag = bag.merge(await collector.collect(request))
+                bag = bag.merge(await collector.collect(request, memory))
             except Exception:
                 logger.warning("collector %s failed; continuing without it", collector.name)
         return bag
@@ -72,27 +73,41 @@ class ContactCollector:
     def __init__(self, reader: ContactReader) -> None:
         self._reader = reader
 
-    async def collect(self, request: TurnRequest) -> ContextBag:
+    async def collect(self, request: TurnRequest, memory: WorkingMemory) -> ContextBag:
         context = request.context
-        identities = [v for v in (request.customer_id, context.email, context.phone) if v]
+        identities = [
+            value
+            for value in (
+                request.customer_id,
+                context.email or memory.recall("customer_email"),
+                context.phone or memory.recall("customer_phone"),
+            )
+            if value
+        ]
         return ContextBag(contact=await self._reader.find(identities))
 
 
 class ResourceCollector:
-    """Fetches the record a turn refers to by id, such as its order or ticket."""
+    """Fetches the record a turn refers to, by the id on the turn or the one remembered.
+
+    The record is read again every turn. That is how the agent sees a current
+    status without ever having stored one.
+    """
 
     def __init__(
         self,
         kind: str,
         reader: RecordReader[BaseModel],
         id_of: Callable[[TurnContext], str | None],
+        fact_key: str,
     ) -> None:
         self.name = kind
         self._kind = kind
         self._reader = reader
         self._id_of = id_of
+        self._fact_key = fact_key
 
-    async def collect(self, request: TurnRequest) -> ContextBag:
-        record_id = self._id_of(request.context)
+    async def collect(self, request: TurnRequest, memory: WorkingMemory) -> ContextBag:
+        record_id = self._id_of(request.context) or memory.recall(self._fact_key)
         record = await self._reader.get(record_id) if record_id else None
         return ContextBag(resources=(Resource(self._kind, record),) if record else ())

@@ -194,8 +194,12 @@ def test_every_input_block_has_a_reply(detector_id: str) -> None:
     assert GuardrailResponder().reply_for(finding)
 
 
-@pytest.mark.parametrize("checkpoint", list(Checkpoint))
-def test_every_checkpoint_has_a_fallback_reply(checkpoint: Checkpoint) -> None:
+STOPS_A_TURN = [c for c in Checkpoint if c is not Checkpoint.MEMORY]
+"""MEMORY only ever costs a fact, so it never has to be explained to a customer."""
+
+
+@pytest.mark.parametrize("checkpoint", STOPS_A_TURN)
+def test_every_checkpoint_that_stops_a_turn_has_a_fallback_reply(checkpoint: Checkpoint) -> None:
     finding = Finding("unknown_detector", checkpoint, Level.FAIL, "x")
 
     assert GuardrailResponder().reply_for(finding)

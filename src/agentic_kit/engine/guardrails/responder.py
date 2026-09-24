@@ -16,6 +16,8 @@ _BY_CHECKPOINT = {
     Checkpoint.PROMPT: "I do not have enough reliable information to answer that safely.",
     Checkpoint.OUTPUT: "I could not put together a safe reply. Let me get a teammate instead.",
 }
+"""Checkpoint.MEMORY is missing on purpose: a rejected fact is dropped and the turn still
+answers, so it never becomes something a customer hears."""
 
 
 class GuardrailResponder:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
+from ...domain.memory import MemoryUpdate
 from ...domain.models import ConversationState, SopDefinition, TurnRequest, TurnResult
 
 
@@ -43,3 +44,5 @@ class GraphState:
     sop: SopDefinition | None = None
     reply: str | None = None
     result: TurnResult | None = None
+    memory: MemoryUpdate = field(default_factory=MemoryUpdate)
+    """What this turn's tools learned, waiting to be committed when the turn is written down."""

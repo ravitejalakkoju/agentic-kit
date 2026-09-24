@@ -104,6 +104,7 @@ async def test_tools_in_one_round_run_at_the_same_time(llm: ScriptedLlm) -> None
         description = "Takes its time."
         safety = Safety.READ
         args_model = SlowArgs
+        remembers = ()
 
         def is_available(self, request: TurnRequest) -> bool:
             return True

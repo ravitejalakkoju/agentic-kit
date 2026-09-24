@@ -24,6 +24,7 @@ class EchoTool:
     description = "Repeat a value back."
     safety = Safety.READ
     args_model = EchoArgs
+    remembers = ()
 
     def __init__(self, available: bool = True) -> None:
         self._available = available
@@ -46,6 +47,7 @@ class DeleteTool:
     description = "Delete something."
     safety = Safety.WRITE
     args_model = DeleteArgs
+    remembers = ()
 
     def __init__(self) -> None:
         self.deleted: list[str] = []
@@ -63,6 +65,7 @@ class ExplodingTool:
     description = "Always raises."
     safety = Safety.READ
     args_model = EchoArgs
+    remembers = ()
 
     def is_available(self, request: TurnRequest) -> bool:
         return True
@@ -158,6 +161,7 @@ def test_a_write_tool_without_a_confirmation_field_is_rejected_at_startup() -> N
         description = "No way to confirm."
         safety = Safety.WRITE
         args_model = EchoArgs
+        remembers = ()
 
         def is_available(self, request: TurnRequest) -> bool:
             return True

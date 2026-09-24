@@ -10,8 +10,10 @@ assembled prompt and the drafted reply exist.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field, replace
 
+from ...domain.memory import MemoryUpdate, WorkingMemory
 from ...domain.models import ConversationState, Message, Role, SopDefinition, TurnRequest
 from ...domain.tools import ToolCall
 from ...errors import ProviderError
@@ -19,6 +21,8 @@ from ...ports.llm import LlmPort, LlmReply, LlmRequest, ToolExchange
 from ..guardrails import Checkpoint, Finding, GuardrailResponder, Guardrails
 from ..prompt.builder import PromptBuilder
 from ..tools.registry import ToolRegistry
+
+logger = logging.getLogger("agentic_kit.runtime")
 
 MAX_TOOL_ROUNDS = 3
 GAVE_UP_REPLY = "I could not finish looking that up. Let me get a teammate to help."
@@ -31,6 +35,8 @@ class RuntimeReply:
     """Set when a guardrail replaced the model's answer with a safe one."""
     tool_calls: tuple[ToolCall, ...] = ()
     """Every tool the model used this turn, in the order it asked for them."""
+    memory: MemoryUpdate = field(default_factory=MemoryUpdate)
+    """What those tools learned, screened but not yet committed."""
 
 
 class TextRuntime:
@@ -51,30 +57,35 @@ class TextRuntime:
     async def run(
         self, *, sop: SopDefinition, conversation: ConversationState, request: TurnRequest
     ) -> RuntimeReply:
+        memory = conversation.memory
         offered = self._tools.definitions(request)
-        prompt = await self._prompts.build(sop=sop, request=request, tools=offered)
+        prompt = await self._prompts.build(sop=sop, request=request, tools=offered, memory=memory)
 
         blocked = self._check(Checkpoint.PROMPT, request, prompt.system)
         if blocked is not None:
             return blocked
 
         messages = (*conversation.history, Message(role=Role.USER, text=request.text))
-        reply, used = await self._converse(
-            LlmRequest(system=prompt.system, messages=messages, tools=offered), request
+        reply, used, learned = await self._converse(
+            LlmRequest(system=prompt.system, messages=messages, tools=offered), request, memory
         )
 
         if not reply.text.strip():
             raise ProviderError("model returned an empty reply")
 
+        # A blocked reply still keeps what the tools found; only the words were wrong.
         checked = self._check(Checkpoint.OUTPUT, request, reply.text)
-        return checked or RuntimeReply(text=reply.text, tool_calls=used)
+        if checked is not None:
+            return replace(checked, memory=learned)
+        return RuntimeReply(text=reply.text, tool_calls=used, memory=learned)
 
     async def _converse(
-        self, ask: LlmRequest, request: TurnRequest
-    ) -> tuple[LlmReply, tuple[ToolCall, ...]]:
+        self, ask: LlmRequest, request: TurnRequest, memory: WorkingMemory
+    ) -> tuple[LlmReply, tuple[ToolCall, ...], MemoryUpdate]:
         """Trade tool calls with the model until it answers or runs out of rounds."""
         exchanges: list[ToolExchange] = []
         used: list[ToolCall] = []
+        learned = MemoryUpdate()
 
         for _ in range(MAX_TOOL_ROUNDS):
             reply = await self._llm.complete(
@@ -86,23 +97,45 @@ class TextRuntime:
                 )
             )
             if not reply.wants_tools:
-                return reply, tuple(used)
+                return reply, tuple(used), learned
 
             used.extend(reply.tool_calls)
-            exchanges.append(await self._run_tools(reply.tool_calls, request))
+            exchange, update = await self._run_tools(reply.tool_calls, request, memory)
+            exchanges.append(exchange)
+            learned = learned.then(update)
 
-        return await self._final_answer(ask, exchanges), tuple(used)
+        return await self._final_answer(ask, exchanges), tuple(used), learned
 
-    async def _run_tools(self, calls: tuple[ToolCall, ...], request: TurnRequest) -> ToolExchange:
+    async def _run_tools(
+        self, calls: tuple[ToolCall, ...], request: TurnRequest, memory: WorkingMemory
+    ) -> tuple[ToolExchange, MemoryUpdate]:
         results = await asyncio.gather(
-            *(self._tools.execute(call, request) for call in calls),
+            *(self._tools.execute(call, request, memory) for call in calls),
         )
-        return ToolExchange(
+        paired = tuple(zip(calls, results, strict=True))
+        exchange = ToolExchange(
             calls=calls,
-            results=tuple(
-                (call.id, result.for_model()) for call, result in zip(calls, results, strict=True)
-            ),
+            results=tuple((call.id, result.for_model()) for call, result in paired),
         )
+        update = MemoryUpdate.from_tools((call.name, result) for call, result in paired)
+        return exchange, self._screen(request, update)
+
+    def _screen(self, request: TurnRequest, update: MemoryUpdate) -> MemoryUpdate:
+        """Drop facts carrying text that should never reach a later prompt.
+
+        A fact joins the system prompt on every turn after this one, so a
+        poisoned lookup would outlive the turn that fetched it. Losing the fact
+        costs a repeated question; the reply still goes out.
+        """
+        poisoned = {
+            fact.key
+            for fact in update.facts
+            if not self._guardrails.check(Checkpoint.MEMORY, request, fact.value).passed
+        }
+        if not poisoned:
+            return update
+        logger.warning("dropped facts that failed memory screening: %s", sorted(poisoned))
+        return update.without(poisoned)
 
     async def _final_answer(self, ask: LlmRequest, exchanges: list[ToolExchange]) -> LlmReply:
         """One last ask with no tools, so the model has to answer with what it has."""

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from dataclasses import replace
 
 from pydantic import ValidationError
 
+from ...domain.memory import VALUE_LIMIT, WorkingMemory
 from ...domain.models import TurnRequest
 from ...domain.tools import Safety, ToolCall, ToolDefinition, ToolResult, ToolStatus
 from ...ports.tools import ConfirmableArgs, Tool, ToolContext
@@ -41,7 +43,9 @@ class ToolRegistry:
             if tool.is_available(request)
         )
 
-    async def execute(self, call: ToolCall, request: TurnRequest) -> ToolResult:
+    async def execute(
+        self, call: ToolCall, request: TurnRequest, memory: WorkingMemory | None = None
+    ) -> ToolResult:
         tool = self._tools.get(call.name)
         if tool is None or not tool.is_available(request):
             return ToolResult.rejected(
@@ -56,13 +60,36 @@ class ToolRegistry:
         if tool.safety is Safety.WRITE and not getattr(args, "confirmed", False):
             return ToolResult.rejected(ToolStatus.NEEDS_CONFIRMATION, CONFIRM_FIRST)
 
+        context = ToolContext(request=request, memory=memory or WorkingMemory())
         try:
-            return await tool.execute(args, ToolContext(request=request))
+            result = await tool.execute(args, context)
         except Exception:
             logger.exception("tool %s raised", call.name)
             return ToolResult.rejected(
                 ToolStatus.FAILED, f"The {call.name} tool failed. Do not assume it worked."
             )
+        return self._narrow(tool, result)
+
+    def _narrow(self, tool: Tool, result: ToolResult) -> ToolResult:
+        """Hold a tool to what it declared it may remember.
+
+        A key the tool never declared, or a value too long to be an identifier,
+        is the tool misbehaving. That is the same class of problem as bad
+        arguments or a raised exception, all of which are answered here.
+        """
+        kept = {
+            key: value
+            for key, value in result.learned.items()
+            if key in tool.remembers and len(value) <= VALUE_LIMIT
+        }
+        if len(kept) == len(result.learned):
+            return result
+        logger.warning(
+            "tool %s reported facts it may not write: %s",
+            tool.name,
+            sorted(set(result.learned) - set(kept)),
+        )
+        return replace(result, learned=kept)
 
     def _define(self, tool: Tool) -> ToolDefinition:
         """Fail at startup when a write tool has no way to be confirmed."""
@@ -73,6 +100,7 @@ class ToolRegistry:
             description=tool.description,
             parameters=tool.args_model.model_json_schema(),
             safety=tool.safety,
+            remembers=tuple(tool.remembers),
         )
 
 

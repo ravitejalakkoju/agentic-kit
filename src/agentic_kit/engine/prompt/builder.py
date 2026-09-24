@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ...domain.memory import WorkingMemory
 from ...domain.models import SopDefinition, TurnRequest
 from ...domain.tools import ToolDefinition
 from .context import ContextBag, ContextPipeline
@@ -44,12 +45,15 @@ class PromptBuilder:
         sop: SopDefinition,
         request: TurnRequest,
         tools: tuple[ToolDefinition, ...] = (),
+        memory: WorkingMemory | None = None,
     ) -> BuiltPrompt:
+        memory = memory or WorkingMemory()
         prompt = PromptInput(
             request=request,
             policy=PromptPolicy.for_turn(sop, request, self._rules),
-            context=await self._context.collect(request),
+            context=await self._context.collect(request, memory),
             tools=tools,
+            memory=memory,
         )
         rendered = tuple(
             RenderedSection(section.key, section.title, section.priority, content)

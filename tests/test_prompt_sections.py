@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pytest
 
 from agentic_kit.domain.crm import Order
+from agentic_kit.domain.memory import Fact, PendingInput, WorkingMemory
 from agentic_kit.domain.models import Personality, TurnContext, TurnRequest
 from agentic_kit.domain.tools import Safety, ToolDefinition
 from agentic_kit.engine.guardrails.profile import DEFAULT_RULES
@@ -20,6 +21,7 @@ from agentic_kit.engine.prompt.sections import (
     RuntimeContextSection,
     SopSection,
     ToolCatalogSection,
+    WorkingMemorySection,
 )
 from agentic_kit.seed import SAMPLE_ORDERS, SUPPORT_SOP
 
@@ -36,12 +38,31 @@ A_TOOL = ToolDefinition(
 )
 
 
+def memory_with(
+    facts: dict[str, str] | None = None, waiting: dict[str, str] | None = None
+) -> WorkingMemory:
+    return WorkingMemory(
+        facts={
+            key: Fact(key=key, value=value, source="track_order")
+            for key, value in (facts or {}).items()
+        },
+        pending={
+            key: PendingInput(key=key, prompt=text, source="track_order")
+            for key, text in (waiting or {}).items()
+        },
+    )
+
+
+REMEMBERED = memory_with({"order_id": "1001"})
+
+
 def prompt_input(
     *,
     sop=SUPPORT_SOP,
     context: ContextBag | None = None,
     rules: tuple[str, ...] = DEFAULT_RULES,
     tools: tuple[ToolDefinition, ...] = (A_TOOL,),
+    memory: WorkingMemory = REMEMBERED,
 ) -> PromptInput:
     policy = PromptPolicy.for_turn(sop, REQUEST, rules)
     return PromptInput(
@@ -49,6 +70,7 @@ def prompt_input(
         policy=policy,
         context=context or ContextBag(),
         tools=tools,
+        memory=memory,
     )
 
 
@@ -125,6 +147,38 @@ def test_runtime_context_renders_each_resource_as_a_json_block() -> None:
 
     assert "Order:\n```json" in content
     assert '"status": "shipped"' in content
+
+
+def test_working_memory_names_the_tool_behind_each_fact() -> None:
+    content = WorkingMemorySection().render(prompt_input())
+
+    assert content is not None
+    assert "- order_id: 1001 (from track_order)" in content
+
+
+def test_working_memory_is_left_out_when_nothing_is_known() -> None:
+    assert WorkingMemorySection().render(prompt_input(memory=WorkingMemory())) is None
+
+
+def test_working_memory_repeats_the_tools_own_words_for_what_is_missing() -> None:
+    memory = memory_with(waiting={"order_id": "Ask the customer for their order reference."})
+
+    content = WorkingMemorySection().render(prompt_input(memory=memory))
+
+    assert content is not None
+    assert "Still waiting on:\n- Ask the customer for their order reference." in content
+    assert "Known from this conversation" not in content
+
+
+def test_the_superseded_archive_is_never_shown_to_the_model() -> None:
+    memory = memory_with({"order_id": "1002"})
+    memory.superseded = [Fact(key="order_id", value="1001", source="track_order")]
+
+    content = WorkingMemorySection().render(prompt_input(memory=memory))
+
+    assert content is not None
+    assert "1002" in content
+    assert "1001" not in content
 
 
 @dataclass

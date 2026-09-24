@@ -14,6 +14,8 @@ class Checkpoint(StrEnum):
     INPUT = "input"
     PROMPT = "prompt"
     OUTPUT = "output"
+    MEMORY = "memory"
+    """A fact on its way into storage, where it would join every later prompt."""
 
 
 class Level(StrEnum):

@@ -7,7 +7,12 @@ from ..graph.state import GraphState, NodeKey, Outcome
 
 
 class PersistStateNode:
-    """Writes the turn down: history, active procedure, and a run record."""
+    """Writes the turn down: history, active procedure, what it learned, and a run record.
+
+    The run record is built before the save so every fact can name the turn
+    that taught it. Every path to a reply comes through here, so a turn whose
+    answer was blocked still keeps what its tools found out.
+    """
 
     key = NodeKey.PERSIST_STATE
     outcomes = frozenset({Outcome.CONTINUE})
@@ -32,8 +37,6 @@ class PersistStateNode:
         if result.status is TurnStatus.RESPONDED:
             conversation.attempts = 0
 
-        await self._conversations.save(conversation)
-
         run = RunRecord(
             conversation_id=conversation.conversation_id,
             agent_id=conversation.active_agent_id,
@@ -41,6 +44,9 @@ class PersistStateNode:
             status=result.status,
             outcome=result.outcome,
         )
+        conversation.memory.apply(state.memory, run_id=run.run_id)
+
+        await self._conversations.save(conversation)
         await self._runs.append(run)
         result.run_id = run.run_id
 

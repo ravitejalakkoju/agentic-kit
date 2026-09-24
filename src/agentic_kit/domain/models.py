@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from .memory import WorkingMemory
+
 HISTORY_LIMIT = 20
 """Turns kept per conversation, matching the cap the TypeScript engine applies on save."""
 
@@ -109,6 +111,7 @@ class ConversationState(BaseModel):
     active_agent_id: str | None = None
     active_sop_id: str | None = None
     history: list[Message] = Field(default_factory=list)
+    memory: WorkingMemory = Field(default_factory=WorkingMemory)
     attempts: int = 0
     human_handoff_requested: bool = False
     closed: bool = False
