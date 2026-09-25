@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...domain.models import Message, Role, RunRecord, TurnStatus
+from ...domain.models import FlowKind, Message, Role, RunRecord, TurnStatus
 from ...errors import EngineError
 from ...ports.stores import ConversationStore, RunStore
 from ..graph.state import GraphState, NodeKey, Outcome
@@ -26,7 +26,11 @@ class PersistStateNode:
         if conversation is None or result is None:
             raise EngineError("persistence reached without a conversation and a result")
 
-        conversation.append(Message(role=Role.USER, text=state.request.text))
+        # History is a record of who said what. An event describes what
+        # happened rather than what anyone said, so only the reply goes down,
+        # and it reads perfectly well on its own.
+        if state.request.kind is FlowKind.CONVERSATION:
+            conversation.append(Message(role=Role.USER, text=state.request.text))
         if state.reply:
             conversation.append(Message(role=Role.AGENT, text=state.reply))
 

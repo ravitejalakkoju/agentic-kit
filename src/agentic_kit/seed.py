@@ -22,6 +22,7 @@ SUPPORT_SOP = SopDefinition(
         "Can I change the address on my order?",
         "I want to cancel an order I placed",
     ],
+    events=["order.shipped"],
     catch_all=True,
     personality=Personality(
         name="Ava",
@@ -49,6 +50,7 @@ RETURNS_SOP = SopDefinition(
         "Can I exchange it for a different size?",
         "When will my money come back?",
     ],
+    events=["refund.issued"],
     personality=Personality(
         name="Rohan",
         identity="a returns teammate for an online store",
@@ -76,6 +78,7 @@ DELIVERY_SOP = SopDefinition(
         "It says delivered but I do not have it",
         "The courier left it with a neighbour",
     ],
+    events=["delivery.failed"],
     personality=Personality(
         name="Mei",
         identity="a delivery teammate for an online store",

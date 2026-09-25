@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ..domain.models import ConversationState, FlowKind, SopDefinition, TurnRequest, TurnResult
+from ..domain.models import ConversationState, SopDefinition, TurnRequest, TurnResult
 from .deps import Wired
 
 router = APIRouter(prefix="/v1", tags=["conversation"])
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/v1", tags=["conversation"])
 
 @router.post("/turns", summary="Run one conversation turn")
 async def create_turn(body: TurnRequest, wired: Wired) -> TurnResult:
-    return await wired.engine.handle(FlowKind.CONVERSATION, body)
+    return await wired.engine.handle(body)
 
 
 @router.get("/conversations/{conversation_id}", summary="Inspect persisted state")

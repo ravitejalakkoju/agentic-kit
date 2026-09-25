@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .memory import WorkingMemory
 
@@ -26,10 +26,10 @@ def _new_id() -> str:
 
 
 class FlowKind(StrEnum):
+    """What prompted a turn. A person said something, or something happened."""
+
     CONVERSATION = "conversation"
     EVENT = "event"
-    CALLBACK = "callback"
-    TASK = "task"
 
 
 class Role(StrEnum):
@@ -76,7 +76,18 @@ class TurnRequest(BaseModel):
     conversation_id: str
     customer_id: str
     text: str
+    """What the turn is about. Typed by the customer, or written by whatever happened."""
+    kind: FlowKind = FlowKind.CONVERSATION
+    event: str | None = None
+    """Which event this is. Procedures declare the ones they answer."""
     context: TurnContext = Field(default_factory=TurnContext)
+
+    @model_validator(mode="after")
+    def _named_if_an_event(self) -> TurnRequest:
+        """An event without a name has nothing to route on, so it cannot be built."""
+        if (self.kind is FlowKind.EVENT) != (self.event is not None):
+            raise ValueError("an event turn needs a name, and only an event turn may have one")
+        return self
 
 
 class TurnResult(BaseModel):
@@ -102,6 +113,8 @@ class SopDefinition(BaseModel):
     instructions: str
     examples: list[str] = Field(default_factory=list)
     """Customer utterances that should route here. Used for matching, never shown as replies."""
+    events: list[str] = Field(default_factory=list)
+    """Events that should route here. Named rather than matched, because an event has a name."""
     catch_all: bool = False
     """Whether this procedure takes a turn that matched nothing.
 

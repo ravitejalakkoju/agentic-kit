@@ -21,9 +21,8 @@ from .adapters.sample_crm import (
 )
 from .adapters.vector_store import InMemoryVectorStore
 from .domain.crm import Order, Ticket
-from .domain.models import FlowKind, SopDefinition
+from .domain.models import SopDefinition
 from .engine.ai_engine import AiEngine
-from .engine.flows.conversation import ConversationFlow
 from .engine.graph.executor import GraphExecutor
 from .engine.graph.node import Node
 from .engine.graph.state import NodeKey
@@ -221,9 +220,8 @@ def build(
     ]
 
     executor = GraphExecutor({node.key: node for node in nodes})
-    engine = AiEngine({FlowKind.CONVERSATION: ConversationFlow(executor)})
     return Components(
-        engine=engine,
+        engine=AiEngine(executor),
         conversations=conversations,
         runs=runs,
         catalog=catalog,

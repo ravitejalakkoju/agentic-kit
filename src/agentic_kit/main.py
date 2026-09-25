@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from .api import graph, knowledge, prompts, tools, turns
+from .api import events, graph, knowledge, prompts, tools, turns
 from .composition import build, seed_knowledge
 from .errors import EngineError, ProviderError
 from .ports.llm import LlmPort
@@ -34,6 +34,7 @@ def create_app(settings: Settings | None = None, llm: LlmPort | None = None) -> 
         lifespan=lifespan,
     )
     app.include_router(turns.router)
+    app.include_router(events.router)
     app.include_router(graph.router)
     app.include_router(prompts.router)
     app.include_router(tools.router)

@@ -113,6 +113,14 @@ class SopMatcher:
         """The desk that takes a turn nothing else claimed."""
         return next((sop for sop in await self._catalog.list_all() if sop.catch_all), None)
 
+    async def for_event(self, event: str) -> SopDefinition | None:
+        """The procedure that answers this event, if one claims it.
+
+        Looked up rather than ranked. An event arrives with a name, and
+        guessing at a name is strictly worse than reading it.
+        """
+        return next((sop for sop in await self._catalog.list_all() if event in sop.events), None)
+
     async def _catalogue(self) -> tuple[tuple[SopDefinition, tuple[Vector, ...]], ...]:
         """Embed every procedure once.
 

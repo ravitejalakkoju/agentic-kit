@@ -94,7 +94,7 @@ def layers() -> Diagram:
     d.box("main", "main.py\ncreate_app(settings, llm)", 75, 210, 300, 100, EDGE)
     d.box(
         "routers",
-        "api/ routers\nPOST /v1/turns      POST /v1/prompts/preview\n"
+        "api/ routers\nPOST /v1/turns      POST /v1/events      POST /v1/prompts/preview\n"
         "GET /v1/tools      GET /v1/graph      GET /v1/sops\n"
         "GET /v1/conversations/{id}      POST /v1/knowledge      POST /v1/knowledge/search",
         415,
@@ -148,8 +148,15 @@ def layers() -> Diagram:
     d.group_box(
         "band-engine", "engine - the parts that decide things", 40, 580, 1620, 440, BACKDROP
     )
-    d.box("aiengine", "AiEngine\nflow by FlowKind", 75, 650, 200, 90, ENGINE)
-    d.box("flow", "ConversationFlow\nflows/", 315, 650, 220, 90, ENGINE)
+    d.box(
+        "aiengine",
+        "AiEngine\nthe front door - every kind of turn\nruns the same graph",
+        75,
+        650,
+        460,
+        90,
+        ENGINE,
+    )
     d.box("executor", "GraphExecutor\n+ NodeObserver", 575, 650, 220, 90, INTERNAL)
     d.box(
         "edges",
@@ -293,8 +300,7 @@ def layers() -> Diagram:
     d.arrow("seed", "build")
     d.arrow("build", "components")
     d.arrow("build", "aiengine", via=[(955, 565), (175, 565)])
-    d.arrow("aiengine", "flow")
-    d.arrow("flow", "executor")
+    d.arrow("aiengine", "executor")
     d.arrow("executor", "edges")
     d.arrow("executor", "nodes", via=[(685, 625), (1240, 625)])
     d.arrow("nodes", "graphstate")
@@ -370,17 +376,17 @@ def turn_flow() -> Diagram:
         86,
     )
 
-    entry = (
-        ("in-api", "POST /v1/turns\napi/turns.py", CLIENT),
-        ("in-engine", "AiEngine\nflow for FlowKind", ENGINE),
-        ("in-flow", "ConversationFlow\nbuilds TurnResult", ENGINE),
-        ("in-exec", "GraphExecutor\nwalks the table", INTERNAL),
+    doors = (
+        ("in-turns", "POST /v1/turns\nsomebody spoke", 150),
+        ("in-events", "POST /v1/events\nsomething happened", 230),
     )
-    for column, (key, label, colour) in enumerate(entry):
-        d.box(key, label, 60 + column * 230, 150, 205, 70, colour)
-    d.arrow("in-api", "in-engine")
-    d.arrow("in-engine", "in-flow")
-    d.arrow("in-flow", "in-exec")
+    for key, label, y in doors:
+        d.box(key, label, 60, y, 205, 70, CLIENT)
+    d.box("in-engine", "AiEngine\nhandle(request)", 290, 190, 205, 70, ENGINE)
+    d.box("in-exec", "GraphExecutor\nwalks the table", 520, 190, 205, 70, INTERNAL)
+    for key, _, _ in doors:
+        d.arrow(key, "in-engine")
+    d.arrow("in-engine", "in-exec")
 
     classes = node_classes()
     for row, key in enumerate(SPINE):
@@ -396,7 +402,7 @@ def turn_flow() -> Diagram:
     for key, y in ASIDE.items():
         d.box(key, f"{key}\n{classes[key]}", 820, y, 220, NODE_H, node_style(key))
 
-    d.arrow("in-exec", NodeKey.LOAD_STATE, via=[(852, 250), (580, 250)], label="entry")
+    d.arrow("in-exec", NodeKey.LOAD_STATE, label="entry")
     for (source, target), outcomes in merged_edges().items():
         d.arrow(source, target, label=" / ".join(outcomes), via=DETOURS.get((source, target), ()))
 
@@ -727,12 +733,12 @@ PHASES = (
     ),
     Phase(
         "7",
-        "Async flows and dispatcher",
-        False,
+        "Events",
+        True,
         (
-            "event, task and callback FlowKinds",
-            "POST /v1/events, POST /v1/tasks",
-            "AiEngine gains flows, the graph does not change",
+            "a turn nobody typed, on the same graph",
+            "procedures declare the events they answer",
+            "the flow seam collapsed - one pipeline, said once",
         ),
     ),
     Phase(

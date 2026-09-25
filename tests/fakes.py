@@ -29,7 +29,28 @@ async def send(
         text=text,
         context=context or TurnContext(),
     )
-    return await components.engine.handle(FlowKind.CONVERSATION, request)
+    return await components.engine.handle(request)
+
+
+async def announce(
+    components: Components,
+    event: str,
+    text: str,
+    *,
+    conversation_id: str = "conv-1",
+    customer_id: str = "cust-1",
+    context: TurnContext | None = None,
+) -> TurnResult:
+    """The same front door, for a turn nobody typed."""
+    request = TurnRequest(
+        conversation_id=conversation_id,
+        customer_id=customer_id,
+        text=text,
+        kind=FlowKind.EVENT,
+        event=event,
+        context=context or TurnContext(),
+    )
+    return await components.engine.handle(request)
 
 
 def says(text: str) -> LlmReply:
