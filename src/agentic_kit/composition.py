@@ -19,6 +19,7 @@ from .adapters.sample_crm import (
     InMemoryRecordReader,
     InMemoryTicketNotes,
 )
+from .adapters.sqlite import open_sqlite
 from .adapters.vector_store import InMemoryVectorStore
 from .domain.crm import Order, Ticket
 from .domain.models import SopDefinition
@@ -63,6 +64,7 @@ from .engine.tools import (
 )
 from .ports.knowledge import Embedder
 from .ports.llm import LlmPort
+from .ports.stores import ConversationStore, RunStore, SopCatalog
 from .seed import (
     DEFAULT_SOPS,
     SAMPLE_CONTACTS,
@@ -80,9 +82,9 @@ everything a request would be assembled from, so there is nothing to assemble.""
 @dataclass(frozen=True, slots=True)
 class Components:
     engine: AiEngine
-    conversations: InMemoryConversationStore
-    runs: InMemoryRunStore
-    catalog: InMemorySopCatalog
+    conversations: ConversationStore
+    runs: RunStore
+    catalog: SopCatalog
     prompts: PromptBuilder
     tools: ToolRegistry
     crm: Crm
@@ -183,6 +185,12 @@ def build_embedder(settings: Settings) -> Embedder:
     )
 
 
+def build_stores(settings: Settings) -> tuple[ConversationStore, RunStore]:
+    if not settings.sqlite_path:
+        return InMemoryConversationStore(), InMemoryRunStore()
+    return open_sqlite(settings.sqlite_path)
+
+
 def build(
     settings: Settings,
     llm: LlmPort | None = None,
@@ -191,8 +199,7 @@ def build(
     sops: list[SopDefinition] = DEFAULT_SOPS,
 ) -> Components:
     """Everything wired together. The arguments are the seams worth swapping in a test."""
-    conversations = InMemoryConversationStore()
-    runs = InMemoryRunStore()
+    conversations, runs = build_stores(settings)
     catalog = InMemorySopCatalog(sops)
     guardrails = Guardrails(detectors or default_detectors(), profile)
     responder = GuardrailResponder()

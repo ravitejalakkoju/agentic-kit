@@ -16,6 +16,10 @@ class ConversationStore(Protocol):
 class RunStore(Protocol):
     async def append(self, run: RunRecord) -> None: ...
 
+    async def get(self, run_id: str) -> RunRecord | None: ...
+
+    async def list_for(self, conversation_id: str) -> list[RunRecord]: ...
+
 
 class SopCatalog(Protocol):
     """Holds the procedures. Deliberately cannot pick between them.

@@ -210,7 +210,7 @@ async def test_changing_the_subject_moves_the_conversation_to_another_teammate(
     assert conversation.active_sop_id == DELIVERY_SOP.sop_id
     assert conversation.active_agent_id == DELIVERY_SOP.agent_id
 
-    assert [run.sop_id for run in components.runs.records] == [
+    assert [run.sop_id for run in await components.runs.list_for("conv-1")] == [
         RETURNS_SOP.sop_id,
         DELIVERY_SOP.sop_id,
     ]
@@ -362,7 +362,7 @@ async def test_a_finished_procedure_is_still_named_on_the_run_that_ran_it(
 
     await send(components, RETURN_ASK)
 
-    [run] = components.runs.records
+    [run] = await components.runs.list_for("conv-1")
     assert run.sop_id == RETURNS_SOP.sop_id
     assert run.agent_id == RETURNS_SOP.agent_id
 

@@ -33,7 +33,20 @@ class InMemoryRunStore:
 
     async def append(self, run: RunRecord) -> None:
         async with self._lock:
-            self.records.append(run)
+            self.records.append(run.model_copy(deep=True))
+
+    async def get(self, run_id: str) -> RunRecord | None:
+        async with self._lock:
+            run = next((run for run in self.records if run.run_id == run_id), None)
+            return run.model_copy(deep=True) if run else None
+
+    async def list_for(self, conversation_id: str) -> list[RunRecord]:
+        async with self._lock:
+            return [
+                run.model_copy(deep=True)
+                for run in self.records
+                if run.conversation_id == conversation_id
+            ]
 
 
 class InMemorySopCatalog:

@@ -171,9 +171,12 @@ async def test_the_run_names_the_procedure_that_answered(
 
     result = await announce(components, SHIPPED, SHIPPED_NOTE)
 
-    [run] = components.runs.records
+    [run] = await components.runs.list_for("conv-1")
     assert run.run_id == result.run_id
     assert run.sop_id == SUPPORT_SOP.sop_id
+    assert run.kind is FlowKind.EVENT
+    assert run.event == SHIPPED
+    assert run.reason is None
 
 
 # --- the request itself -----------------------------------------------------
@@ -239,4 +242,4 @@ async def test_an_event_and_a_question_share_one_front_door(
     asked = await send(components, "where is my order")
 
     assert announced.status is asked.status is TurnStatus.RESPONDED
-    assert len(components.runs.records) == 2
+    assert len(await components.runs.list_for("conv-1")) == 2

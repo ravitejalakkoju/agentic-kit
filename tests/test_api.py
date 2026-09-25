@@ -57,6 +57,24 @@ def test_unknown_conversation_is_404(client: TestClient) -> None:
     assert client.get("/v1/conversations/nope").status_code == 404
 
 
+def test_runs_can_be_listed_for_a_conversation_and_read_by_id(
+    client: TestClient, llm: ScriptedLlm
+) -> None:
+    llm.queue("It ships tomorrow.")
+    turn = client.post("/v1/turns", json=TURN).json()
+
+    listed = client.get("/v1/conversations/conv-1/runs")
+    fetched = client.get(f"/v1/runs/{turn['run_id']}")
+
+    assert listed.status_code == fetched.status_code == 200
+    assert listed.json() == [fetched.json()]
+    assert fetched.json()["kind"] == "conversation"
+
+
+def test_unknown_run_is_404(client: TestClient) -> None:
+    assert client.get("/v1/runs/nope").status_code == 404
+
+
 def test_sops_lists_every_seeded_procedure(client: TestClient) -> None:
     response = client.get("/v1/sops")
 

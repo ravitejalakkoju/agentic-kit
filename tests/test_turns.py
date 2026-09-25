@@ -58,9 +58,12 @@ async def test_reply_is_returned_and_the_turn_is_persisted(
     assert conversation.active_sop_id == SUPPORT_SOP.sop_id
     assert conversation.active_agent_id == SUPPORT_SOP.agent_id
 
-    [run] = components.runs.records
+    [run] = await components.runs.list_for("conv-1")
     assert run.run_id == result.run_id
     assert run.sop_id == SUPPORT_SOP.sop_id
+    assert run.kind.value == "conversation"
+    assert run.event is None
+    assert run.reason is None
 
 
 async def test_model_receives_the_sop_prompt_and_prior_history(
@@ -101,7 +104,7 @@ async def test_blank_text_is_a_noop_and_nothing_is_saved(
     assert result.outcome is TurnOutcome.NO_MATCH
     assert llm.calls == []
     assert await components.conversations.get("conv-1") is None
-    assert components.runs.records == []
+    assert await components.runs.list_for("conv-1") == []
 
 
 async def test_closed_conversation_ends_the_turn(components: Components, llm: ScriptedLlm) -> None:
@@ -135,6 +138,11 @@ async def test_provider_failure_asks_the_customer_to_retry(
     assert conversation is not None
     assert conversation.attempts == 1
     assert conversation.human_handoff_requested is False
+
+    [run] = await components.runs.list_for("conv-1")
+    assert run.kind.value == "conversation"
+    assert run.event is None
+    assert run.reason == "timeout"
 
 
 async def test_empty_model_reply_counts_as_a_failure(

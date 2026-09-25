@@ -159,6 +159,10 @@ class RunRecord(BaseModel):
     conversation_id: str
     agent_id: str | None = None
     sop_id: str | None = None
+    kind: FlowKind = FlowKind.CONVERSATION
+    event: str | None = None
+    """Named only when this turn was an event. Empty on a spoken turn."""
     status: TurnStatus
     outcome: TurnOutcome
+    reason: str | None = None
     created_at: datetime = Field(default_factory=_now)

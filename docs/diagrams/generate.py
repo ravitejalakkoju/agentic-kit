@@ -96,7 +96,8 @@ def layers() -> Diagram:
         "routers",
         "api/ routers\nPOST /v1/turns      POST /v1/events      POST /v1/prompts/preview\n"
         "GET /v1/tools      GET /v1/graph      GET /v1/sops\n"
-        "GET /v1/conversations/{id}      POST /v1/knowledge      POST /v1/knowledge/search",
+        "GET /v1/conversations/{id}      GET /v1/conversations/{id}/runs\n"
+        "GET /v1/runs/{id}      POST /v1/knowledge      POST /v1/knowledge/search",
         415,
         210,
         640,
@@ -213,8 +214,8 @@ def layers() -> Diagram:
         "band-adapters", "adapters - what satisfies them today", 680, 1050, 980, 550, BACKDROP
     )
     seams = (
-        ("conv", "ConversationStore", "InMemoryConversationStore"),
-        ("runs", "RunStore", "InMemoryRunStore"),
+        ("conv", "ConversationStore", "InMemoryConversationStore  -  SqliteConversationStore"),
+        ("runs", "RunStore", "InMemoryRunStore  -  SqliteRunStore"),
         ("sops", "SopCatalog", "InMemorySopCatalog"),
         ("llm", "LlmPort", "OpenAiLlm  -  DummyLlm  -  ScriptedLlm (tests)"),
         (
@@ -605,7 +606,13 @@ def seams() -> Diagram:
             "ConversationStore\nRunStore\nSopCatalog",
             "the nodes",
             STORE,
-            ["InMemoryConversationStore", "InMemoryRunStore", "InMemorySopCatalog"],
+            [
+                "InMemoryConversationStore",
+                "SqliteConversationStore",
+                "InMemoryRunStore",
+                "SqliteRunStore",
+                "InMemorySopCatalog",
+            ],
         ),
         Panel(
             "knowledge",
@@ -744,10 +751,11 @@ PHASES = (
     Phase(
         "8",
         "Persistence and observability",
-        False,
+        True,
         (
-            "SQLite or Postgres behind the store ports",
-            "run records worth querying, tracing on NodeObserver",
+            "SQLite behind ConversationStore and RunStore",
+            "queryable run records with kind, event, and reason",
+            "conversation-scoped GET routes for runs",
         ),
     ),
 )

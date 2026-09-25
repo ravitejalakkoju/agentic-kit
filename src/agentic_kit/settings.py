@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_base_url: str | None = None
     openai_timeout_seconds: float = 30.0
+    sqlite_path: str = ""
 
     @property
     def has_live_llm(self) -> bool:

@@ -52,8 +52,11 @@ class PersistStateNode:
             conversation_id=conversation.conversation_id,
             agent_id=state.sop.agent_id if state.sop else conversation.active_agent_id,
             sop_id=state.sop.sop_id if state.sop else conversation.active_sop_id,
+            kind=state.request.kind,
+            event=state.request.event,
             status=result.status,
             outcome=result.outcome,
+            reason=result.reason,
         )
         conversation.memory.apply(state.memory, run_id=run.run_id)
 
