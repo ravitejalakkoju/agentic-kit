@@ -3,6 +3,9 @@
 Four pictures of the engine. They are generated, not drawn, so they can be
 checked like code.
 
+For code-editable Mermaid diagrams of the current architecture, turn flow,
+and memory boundaries, see the [architecture guide](../architecture.md).
+
 | File | Answers |
 | --- | --- |
 | `01-layers.excalidraw` | What depends on what, and where `build()` wires it |

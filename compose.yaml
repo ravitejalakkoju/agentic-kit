@@ -1,0 +1,26 @@
+services:
+  api:
+    build: .
+    init: true
+    ports:
+      - "127.0.0.1:${PORT:-3200}:3200"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy-openai-key}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      SQLITE_PATH: /data/agentic-kit.db
+    volumes:
+      - agentic_kit_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:3200/health', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  agentic_kit_data:
